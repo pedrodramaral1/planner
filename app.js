@@ -1,21 +1,46 @@
 /* ===========================================================
    Planner pessoal · Pedro
    Tudo client-side, persistido em localStorage.
+   Valores financeiros armazenados em CENTAVOS (inteiros) —
+   nunca em float — para precisão absoluta.
    =========================================================== */
 
-const STORE_KEY = 'planner_v1';
+const STORE_KEY = 'planner_v2';
+const LEGACY_KEY = 'planner_v1';
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-const STATUSES = [
-  { key: 'todo',  label: 'A fazer' },
-  { key: 'doing', label: 'Fazendo' },
-  { key: 'done',  label: 'Feito' },
+const LEARN_TYPES = [
+  { key: 'aprendi',   label: 'Aprendi',   ico: '◎', hint: 'Conhecimento novo que entrou no repertório' },
+  { key: 'aprimorei', label: 'Aprimorei', ico: '◈', hint: 'Habilidade existente que ficou mais afiada' },
+  { key: 'criei',     label: 'Criei',     ico: '✦', hint: 'Algo que saiu das suas mãos: projeto, automação, solução' },
 ];
-const PRIOS = ['alta', 'media', 'baixa'];
 const FIN_CATS = ['Salário', 'Extra', 'Moradia', 'Alimentação', 'Transporte', 'Saúde', 'Estudos', 'Lazer', 'Assinaturas', 'Outros'];
+const DEFAULT_PROTOCOLS = [
+  { name: 'Protocolo 1 · Acordar às 06:00', desc: 'Todos os dias, sem exceção.', items: ['Acordei às 06:00'] },
+  { name: 'Protocolo 2 · Vitamina D', desc: 'Tomar vitamina D todos os dias.', items: ['Tomei a vitamina D'] },
+  { name: 'Protocolo 3 · Hidratação', desc: 'Garrafa ou copo de água sempre por perto.', items: ['Água ao acordar', 'Água antes de dormir'] },
+  { name: 'Protocolo 4 · Disciplina', desc: 'Cumprir o primeiro protocolo.', items: ['Protocolo 1 cumprido'] },
+];
+
+/* ---------- moeda: centavos <-> texto ---------- */
+const BRLfmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+function brl(cents) { return BRLfmt.format(cents / 100); }
+function parseCents(str) {
+  // aceita "1.234,56", "1234,56", "1234.56", "1234"
+  if (typeof str === 'number') return Math.round(str * 100);
+  let s = String(str || '').trim().replace(/[R$\s]/g, '');
+  if (!s) return NaN;
+  const neg = /^-/.test(s); s = s.replace(/^-/, '');
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  const v = parseFloat(s);
+  if (isNaN(v)) return NaN;
+  return (neg ? -1 : 1) * Math.round(v * 100);
+}
 
 /* ---------- estado ---------- */
 let db = load();
 let finDate = new Date();
+let weekRef = new Date();
+migrate();
 save();
 
 function load() {
@@ -23,32 +48,63 @@ function load() {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) return JSON.parse(raw);
   } catch (e) {}
+  return blank();
+}
+function blank() {
   return {
-    work: [],
-    studies: { goalMin: 300, sessions: [] },
-    finance: [],
+    learn: [],
+    finance: { reserveCents: 400000, entries: [] }, // R$ 4.000,00 de reserva
     protocols: [],
   };
 }
+function migrate() {
+  // v1 -> v2: aproveita lançamentos financeiros antigos (eram float em `amount`)
+  try {
+    const old = JSON.parse(localStorage.getItem(LEGACY_KEY) || 'null');
+    if (old && !db._migratedV1) {
+      (old.finance || []).forEach(f => {
+        db.finance.entries.push({
+          id: f.id || uid(), type: f.type, desc: f.desc, cat: f.cat || 'Outros',
+          cents: Math.round((+f.amount || 0) * 100), date: f.date,
+        });
+      });
+      db._migratedV1 = true;
+    }
+  } catch (e) {}
+  // garante os protocolos padrão (sem duplicar)
+  DEFAULT_PROTOCOLS.forEach(dp => {
+    if (!db.protocols.some(p => p.name === dp.name)) {
+      db.protocols.push({
+        id: uid(), name: dp.name, desc: dp.desc, daily: true, lastReset: todayStr(),
+        items: dp.items.map(t => ({ id: uid(), text: t, done: false })),
+      });
+    }
+  });
+  // reset diário dos protocolos
+  const today = todayStr();
+  db.protocols.forEach(p => {
+    if (p.daily && p.lastReset !== today) {
+      p.items.forEach(i => i.done = false);
+      p.lastReset = today;
+    }
+  });
+}
 function save() { localStorage.setItem(STORE_KEY, JSON.stringify(db)); }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
-function todayStr() { return new Date().toISOString().slice(0, 10); }
-function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
-function brl(v) { return (v < 0 ? '-' : '') + 'R$ ' + Math.abs(v).toFixed(2).replace('.', ','); }
-function fmtMin(min) {
-  const h = Math.floor(min / 60), m = min % 60;
-  return h ? `${h}h${m ? String(m).padStart(2, '0') : ''}` : `${m}min`;
+function todayStr() { return localISO(new Date()); }
+function localISO(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 
 /* ===========================================================
    NAVEGAÇÃO
    =========================================================== */
 const TITLES = {
-  hoje:       ['Hoje', 'Resumo do dia em todas as áreas'],
-  trabalho:   ['Trabalho', 'Tarefas e acompanhamento do que está em andamento'],
-  estudos:    ['Estudos', 'Sessões de estudo e progresso da meta semanal'],
-  financeiro: ['Financeiro', 'Receitas, gastos e saldo do mês'],
-  protocolos: ['Protocolos', 'Checklists reutilizáveis para rotinas'],
+  hoje:       ['Hoje', 'Protocolos, agenda e evolução do dia'],
+  trabalho:   ['Trabalho', 'Registro semanal do que você aprendeu, aprimorou e criou'],
+  financeiro: ['Financeiro', 'Reserva, receitas e gastos com precisão de centavos'],
+  protocolos: ['Protocolos', 'Rotinas diárias inegociáveis'],
 };
 
 document.querySelectorAll('.nav-item').forEach(btn => {
@@ -60,8 +116,7 @@ function switchView(v) {
   document.getElementById('viewTitle').textContent = TITLES[v][0];
   document.getElementById('viewSub').textContent = TITLES[v][1];
   if (v === 'hoje') renderHoje();
-  if (v === 'trabalho') renderWork();
-  if (v === 'estudos') renderStudies();
+  if (v === 'trabalho') renderLearn();
   if (v === 'financeiro') renderFin();
   if (v === 'protocolos') renderProtos();
 }
@@ -69,240 +124,175 @@ function refreshAll() {
   const active = document.querySelector('.view.active').id.replace('view-', '');
   switchView(active);
 }
+document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => switchView(b.dataset.go));
 
 /* ===========================================================
-   HOJE (dashboard)
+   SEMANAS (domingo a sábado)
    =========================================================== */
-function weekStartStr() {
-  const d = new Date();
-  d.setDate(d.getDate() - d.getDay()); // domingo
-  return d.toISOString().slice(0, 10);
+function weekStart(d) {
+  const x = new Date(d); x.setHours(0, 0, 0, 0);
+  x.setDate(x.getDate() - x.getDay());
+  return x;
 }
-function weekSessions() {
-  const ws = weekStartStr();
-  return db.studies.sessions.filter(s => s.date >= ws);
+function weekRange(d) {
+  const start = weekStart(d);
+  const end = new Date(start); end.setDate(start.getDate() + 6);
+  return [localISO(start), localISO(end)];
 }
-function monthFinance(date) {
-  const y = date.getFullYear(), m = String(date.getMonth() + 1).padStart(2, '0');
-  const prefix = `${y}-${m}`;
-  return db.finance.filter(f => (f.date || '').startsWith(prefix));
+function entriesOfWeek(d) {
+  const [a, b] = weekRange(d);
+  return db.learn.filter(e => e.date >= a && e.date <= b);
 }
 
+/* ===========================================================
+   HOJE
+   =========================================================== */
 function renderHoje() {
-  const pend = db.work.filter(t => t.status !== 'done');
-  const doing = db.work.filter(t => t.status === 'doing');
-  const wkMin = weekSessions().reduce((a, s) => a + (+s.minutes || 0), 0);
-  const fin = monthFinance(new Date());
-  const inc = fin.filter(f => f.type === 'in').reduce((a, f) => a + (+f.amount || 0), 0);
-  const exp = fin.filter(f => f.type === 'out').reduce((a, f) => a + (+f.amount || 0), 0);
+  const wk = entriesOfWeek(new Date());
+  const fin = monthEntries(new Date());
+  const exp = fin.filter(f => f.type === 'out').reduce((a, f) => a + f.cents, 0);
+  const totalCents = db.finance.reserveCents + db.finance.entries.reduce((a, f) => a + (f.type === 'in' ? f.cents : -f.cents), 0);
+  const allItems = db.protocols.flatMap(p => p.items);
+  const doneItems = allItems.filter(i => i.done).length;
 
   document.getElementById('hojeKpis').innerHTML = `
-    ${kpi('', pend.length, 'Tarefas pendentes')}
-    ${kpi('amber', doing.length, 'Em andamento')}
-    ${kpi('blue', fmtMin(wkMin), 'Estudo na semana')}
-    ${kpi(inc - exp >= 0 ? 'green' : 'red', brl(inc - exp), 'Saldo do mês')}
+    ${kpi('blue', wk.length, 'Registros técnicos na semana')}
+    ${kpi(doneItems === allItems.length && allItems.length ? 'green' : 'amber', `${doneItems}/${allItems.length}`, 'Protocolos de hoje')}
+    ${kpi(totalCents >= 0 ? 'green' : 'red', brl(totalCents), 'Patrimônio (reserva + fluxo)')}
+    ${kpi('red', brl(exp), 'Gastos no mês')}
   `;
 
-  // tarefas pendentes (mais urgentes primeiro)
-  const prioOrder = { alta: 0, media: 1, baixa: 2 };
-  const tasks = [...pend]
-    .sort((a, b) => (prioOrder[a.prio] ?? 3) - (prioOrder[b.prio] ?? 3) || (a.date || '9999').localeCompare(b.date || '9999'))
-    .slice(0, 5);
-  document.getElementById('hojeTarefas').innerHTML = tasks.length ? tasks.map(t =>
-    `<li><span style="flex:1">${esc(t.title)}</span>${t.prio ? `<span class="tc-prio ${t.prio}">${t.prio}</span>` : ''}</li>`
-  ).join('') : `<li class="empty">Nenhuma tarefa pendente 🎉</li>`;
+  // protocolos interativos direto no dashboard
+  document.getElementById('hojeProtocolos').innerHTML = db.protocols.map(p =>
+    p.items.map(i => `<li class="${i.done ? 'done' : ''}">
+      <input type="checkbox" data-proto="${p.id}" data-item="${i.id}" ${i.done ? 'checked' : ''} />
+      <span>${esc(i.text)}</span>
+      <small class="muted" style="margin-left:auto">${esc(p.name.split('·')[0].trim())}</small>
+    </li>`).join('')
+  ).join('') || '<li class="empty">Nenhum protocolo.</li>';
+  document.querySelectorAll('#hojeProtocolos input[data-proto]').forEach(cb => cb.onchange = () => {
+    const p = db.protocols.find(x => x.id === cb.dataset.proto);
+    const item = p.items.find(i => i.id === cb.dataset.item);
+    item.done = cb.checked; save(); renderHoje();
+  });
 
-  // estudo da semana
-  const goal = db.studies.goalMin || 1;
-  const pct = Math.min(100, Math.round((wkMin / goal) * 100));
-  document.getElementById('hojeStudyFill').style.width = pct + '%';
-  document.getElementById('hojeStudyLabel').textContent = `${fmtMin(wkMin)} de ${fmtMin(goal)} (${pct}%)`;
-  const recent = [...weekSessions()].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
-  document.getElementById('hojeEstudos').innerHTML = recent.length ? recent.map(s =>
-    `<li><span style="flex:1">${esc(s.subject)}</span><span class="badge-num">${fmtMin(+s.minutes || 0)}</span></li>`
-  ).join('') : `<li class="empty">Nenhuma sessão esta semana.</li>`;
-
-  // financeiro
-  document.getElementById('hojeFin').innerHTML = `
-    <div class="row"><span class="muted">Receitas</span><span class="pos">+ ${brl(inc)}</span></div>
-    <div class="row"><span class="muted">Gastos</span><span class="neg">− ${brl(exp)}</span></div>
-    <div class="row"><span>Saldo</span><span class="saldo ${inc - exp >= 0 ? 'pos' : 'neg'}">${brl(inc - exp)}</span></div>
-  `;
-
-  // protocolos
-  document.getElementById('hojeProtocolos').innerHTML = db.protocols.length ? db.protocols.slice(0, 4).map(p => {
-    const done = p.items.filter(i => i.done).length;
-    return `<li><span style="flex:1">${esc(p.name)}</span><span class="badge-num">${done}/${p.items.length}</span></li>`;
-  }).join('') : `<li class="empty">Nenhum protocolo criado.</li>`;
+  // aprendizados da semana
+  const recent = [...wk].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+  document.getElementById('hojeAprendizados').innerHTML = recent.length ? recent.map(e => {
+    const t = LEARN_TYPES.find(t => t.key === e.type);
+    return `<li><span class="lt-badge ${e.type}">${t.ico} ${t.label}</span><span style="flex:1">${esc(e.title)}</span></li>`;
+  }).join('') : '<li class="empty">Nada registrado esta semana ainda.</li>';
 }
 function kpi(cls, val, label) {
   return `<div class="kpi ${cls}"><div class="kpi-val">${val}</div><div class="kpi-label">${label}</div></div>`;
 }
-document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => switchView(b.dataset.go));
 
 /* ===========================================================
-   TRABALHO — kanban
+   TRABALHO — registro semanal de evolução técnica
    =========================================================== */
-function renderWork() {
-  const search = (document.getElementById('workSearch').value || '').toLowerCase();
-  const board = document.getElementById('workBoard');
+function renderLearn() {
+  const [a, b] = weekRange(weekRef);
+  const da = new Date(a + 'T00:00'), dbb = new Date(b + 'T00:00');
+  document.getElementById('weekLabel').textContent =
+    `${da.getDate()} ${MONTHS[da.getMonth()].slice(0,3)} – ${dbb.getDate()} ${MONTHS[dbb.getMonth()].slice(0,3)} ${dbb.getFullYear()}`;
 
-  board.innerHTML = STATUSES.map(s => {
-    const items = db.work.filter(t =>
-      t.status === s.key &&
-      (!search || t.title.toLowerCase().includes(search) || (t.desc || '').toLowerCase().includes(search))
-    ).sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
-
-    return `<div class="column" data-status="${s.key}">
-      <div class="column-head"><span class="dot ${s.key}"></span> ${s.label} <span class="count">${items.length}</span></div>
-      ${items.map(taskCard).join('') || '<div class="empty">Sem tarefas</div>'}
+  const wk = entriesOfWeek(weekRef);
+  document.getElementById('learnLists').innerHTML = LEARN_TYPES.map(t => {
+    const items = wk.filter(e => e.type === t.key).sort((x, y) => y.date.localeCompare(x.date));
+    return `<div class="learn-col">
+      <div class="learn-col-head"><span class="lt-badge ${t.key}">${t.ico} ${t.label}</span><span class="count">${items.length}</span></div>
+      <p class="learn-hint">${t.hint}</p>
+      <ul class="learn-list">
+        ${items.map(e => `<li data-id="${e.id}">
+          <div class="ll-main">
+            <strong>${esc(e.title)}</strong>
+            ${e.desc ? `<p>${esc(e.desc)}</p>` : ''}
+            ${(e.skills || []).length ? `<div class="ll-skills">${e.skills.map(s => `<span class="skill-tag">${esc(s)}</span>`).join('')}</div>` : ''}
+          </div>
+          <div class="ll-side">
+            <span class="muted">${e.date.slice(8,10)}/${e.date.slice(5,7)}</span>
+            <button class="tc-mini ll-edit">Editar</button>
+          </div>
+        </li>`).join('') || '<li class="empty">Sem registros nesta semana.</li>'}
+      </ul>
+      <button class="btn-soft learn-add" data-type="${t.key}">+ ${t.label.toLowerCase()} algo</button>
     </div>`;
   }).join('');
 
-  setupDragDrop();
-  board.querySelectorAll('.task-card').forEach(card => {
-    card.querySelector('.tc-edit').onclick = e => { e.stopPropagation(); openWorkModal(card.dataset.id); };
-    card.querySelector('.tc-del').onclick = e => {
-      e.stopPropagation();
-      if (confirm('Excluir esta tarefa?')) {
-        db.work = db.work.filter(x => x.id !== card.dataset.id);
-        save(); toast('Tarefa excluída'); renderWork();
-      }
-    };
-  });
-}
-function taskCard(t) {
-  const dt = t.date ? new Date(t.date + 'T00:00') : null;
-  const dateStr = dt ? `${dt.getDate()}/${dt.getMonth() + 1}` : '';
-  return `<div class="task-card" draggable="true" data-id="${t.id}">
-    <h4>${esc(t.title)}</h4>
-    ${t.desc ? `<p>${esc(t.desc)}</p>` : ''}
-    <div class="tc-foot">
-      ${t.prio ? `<span class="tc-prio ${t.prio}">${t.prio}</span>` : ''}
-      ${dateStr ? `<span class="tc-date">${dateStr}</span>` : ''}
-      <span class="tc-actions">
-        <button class="tc-mini tc-edit">Editar</button>
-        <button class="tc-mini tc-del">Excluir</button>
-      </span>
-    </div>
-  </div>`;
-}
-function setupDragDrop() {
-  let dragId = null;
-  document.querySelectorAll('.task-card').forEach(card => {
-    card.addEventListener('dragstart', () => { dragId = card.dataset.id; card.classList.add('dragging'); });
-    card.addEventListener('dragend', () => card.classList.remove('dragging'));
-  });
-  document.querySelectorAll('.column').forEach(col => {
-    col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('drag-over'); });
-    col.addEventListener('dragleave', () => col.classList.remove('drag-over'));
-    col.addEventListener('drop', e => {
-      e.preventDefault(); col.classList.remove('drag-over');
-      const t = db.work.find(x => x.id === dragId);
-      if (t && t.status !== col.dataset.status) {
-        t.status = col.dataset.status; save(); renderWork();
-      }
-    });
-  });
-}
-document.getElementById('workSearch').oninput = renderWork;
-document.getElementById('addWorkBtn').onclick = () => openWorkModal();
+  document.querySelectorAll('.learn-add').forEach(b => b.onclick = () => openLearnModal(null, b.dataset.type));
+  document.querySelectorAll('.ll-edit').forEach(b => b.onclick = () => openLearnModal(b.closest('li').dataset.id));
 
-/* ===========================================================
-   ESTUDOS
-   =========================================================== */
-function renderStudies() {
-  const wk = weekSessions();
-  const wkMin = wk.reduce((a, s) => a + (+s.minutes || 0), 0);
-  const goal = db.studies.goalMin || 1;
-  const pct = Math.min(100, Math.round((wkMin / goal) * 100));
-  document.getElementById('studyFill').style.width = pct + '%';
-  document.getElementById('studyLabel').textContent = `${fmtMin(wkMin)} de ${fmtMin(goal)} (${pct}%)`;
-
-  // por matéria (na semana)
-  const bySub = {};
-  wk.forEach(s => { bySub[s.subject] = (bySub[s.subject] || 0) + (+s.minutes || 0); });
-  document.getElementById('studyBySubject').innerHTML = Object.keys(bySub).length
-    ? Object.entries(bySub).sort((a, b) => b[1] - a[1]).map(([sub, min]) =>
-        `<span>📖 ${esc(sub)}: <strong>${fmtMin(min)}</strong></span>`).join('')
-    : '<span class="muted">Sem sessões esta semana.</span>';
-
-  // histórico
-  const sessions = [...db.studies.sessions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 50);
-  document.getElementById('sessionList').innerHTML = sessions.length ? sessions.map(s => {
-    const dt = new Date(s.date + 'T00:00');
-    return `<li data-id="${s.id}">
-      <span class="sess-date">${dt.getDate()}/${dt.getMonth() + 1}</span>
-      <strong>${esc(s.subject)}</strong>
-      <span class="sess-notes">${esc(s.notes || '')}</span>
-      <span class="sess-min">${fmtMin(+s.minutes || 0)}</span>
-      <button class="tc-mini sess-del">✕</button>
-    </li>`;
-  }).join('') : `<li class="empty">Nenhuma sessão registrada ainda.</li>`;
-
-  document.querySelectorAll('.sess-del').forEach(b => b.onclick = () => {
-    const id = b.closest('li').dataset.id;
-    if (confirm('Excluir esta sessão?')) {
-      db.studies.sessions = db.studies.sessions.filter(s => s.id !== id);
-      save(); toast('Sessão excluída'); renderStudies();
-    }
-  });
+  renderSkillBars();
 }
-document.getElementById('studyQuickForm').onsubmit = e => {
-  e.preventDefault();
-  const data = Object.fromEntries(new FormData(e.target).entries());
-  if (!data.subject.trim() || !data.minutes) return;
-  db.studies.sessions.push({ id: uid(), subject: data.subject.trim(), minutes: +data.minutes, date: data.date, notes: data.notes.trim() });
-  save(); toast('Sessão registrada'); e.target.reset();
-  e.target.querySelector('[name="date"]').value = todayStr();
-  renderStudies();
-};
-document.getElementById('editGoalBtn').onclick = () => {
-  modalTitle.textContent = 'Meta semanal de estudo';
-  modalForm.innerHTML = `
-    ${field('Meta em minutos por semana (ex.: 300 = 5h)', 'goal', 'number', db.studies.goalMin)}
-    <div class="modal-actions">
-      <button type="button" class="btn-ghost" data-cancel>Cancelar</button>
-      <button type="submit" class="btn-primary">Salvar</button>
-    </div>`;
-  wireModal(data => {
-    db.studies.goalMin = Math.max(1, +data.goal || 300);
-    save(); toast('Meta atualizada'); renderStudies();
-  });
-};
+function renderSkillBars() {
+  const counts = {};
+  db.learn.forEach(e => (e.skills || []).forEach(s => {
+    const k = s.trim(); if (k) counts[k] = (counts[k] || 0) + 1;
+  }));
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 14);
+  const max = sorted[0]?.[1] || 1;
+  document.getElementById('skillBars').innerHTML = sorted.length ? sorted.map(([skill, n]) => `
+    <div class="sb-row">
+      <span class="sb-label">${esc(skill)}</span>
+      <div class="sb-track"><div class="sb-fill" style="width:${Math.round(n / max * 100)}%"></div></div>
+      <span class="sb-num">${n}</span>
+    </div>`).join('') : '<div class="empty">Adicione tags de tecnologia nos registros para ver sua evolução aqui.</div>';
+}
+document.getElementById('weekPrev').onclick = () => { weekRef.setDate(weekRef.getDate() - 7); renderLearn(); };
+document.getElementById('weekNext').onclick = () => { weekRef.setDate(weekRef.getDate() + 7); renderLearn(); };
+document.getElementById('weekToday').onclick = () => { weekRef = new Date(); renderLearn(); };
+document.getElementById('addLearnBtn').onclick = () => openLearnModal();
 
 /* ===========================================================
    FINANCEIRO
    =========================================================== */
+function monthEntries(date) {
+  const prefix = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  return db.finance.entries.filter(f => (f.date || '').startsWith(prefix));
+}
 function renderFin() {
   const y = finDate.getFullYear(), m = finDate.getMonth();
   document.getElementById('finMonthLabel').textContent = `${MONTHS[m]} ${y}`;
-  const entries = monthFinance(finDate).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  const inc = entries.filter(f => f.type === 'in').reduce((a, f) => a + (+f.amount || 0), 0);
-  const exp = entries.filter(f => f.type === 'out').reduce((a, f) => a + (+f.amount || 0), 0);
+  document.getElementById('catMonthLabel').textContent = `${MONTHS[m]} ${y}`;
+  const entries = monthEntries(finDate).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const inc = entries.filter(f => f.type === 'in').reduce((a, f) => a + f.cents, 0);
+  const exp = entries.filter(f => f.type === 'out').reduce((a, f) => a + f.cents, 0);
+  const totalCents = db.finance.reserveCents + db.finance.entries.reduce((a, f) => a + (f.type === 'in' ? f.cents : -f.cents), 0);
 
   document.getElementById('finKpis').innerHTML = `
-    ${kpi('green', brl(inc), 'Receitas')}
-    ${kpi('red', brl(exp), 'Gastos')}
-    ${kpi(inc - exp >= 0 ? 'blue' : 'red', brl(inc - exp), 'Saldo do mês')}
+    ${kpi(totalCents >= 0 ? 'green' : 'red', brl(totalCents), 'Patrimônio total')}
+    ${kpi('', brl(db.finance.reserveCents), 'Reserva')}
+    ${kpi('green', brl(inc), 'Receitas no mês')}
+    ${kpi('red', brl(exp), 'Gastos no mês')}
+    ${kpi(inc - exp >= 0 ? 'blue' : 'red', brl(inc - exp), 'Resultado do mês')}
   `;
 
-  document.getElementById('finList').innerHTML = entries.length ? entries.map(f => {
-    const dt = new Date(f.date + 'T00:00');
-    return `<li data-id="${f.id}">
+  document.getElementById('finList').innerHTML = entries.length ? entries.map(f => `
+    <li data-id="${f.id}">
       <span class="fin-ico ${f.type}">${f.type === 'in' ? '↑' : '↓'}</span>
-      <span class="fin-desc">${esc(f.desc)}<small>${esc(f.cat || '')} · ${dt.getDate()}/${dt.getMonth() + 1}</small></span>
-      <span class="fin-val ${f.type}">${f.type === 'in' ? '+' : '−'} ${brl(+f.amount || 0)}</span>
+      <span class="fin-desc">${esc(f.desc)}<small>${esc(f.cat || '')} · ${f.date.slice(8,10)}/${f.date.slice(5,7)}</small></span>
+      <span class="fin-val ${f.type}">${f.type === 'in' ? '+' : '−'} ${brl(f.cents)}</span>
       <button class="tc-mini fin-edit">Editar</button>
       <button class="tc-mini fin-del">✕</button>
-    </li>`;
-  }).join('') : `<li class="empty">Nenhum lançamento neste mês.</li>`;
+    </li>`).join('') : '<li class="empty">Nenhum lançamento neste mês.</li>';
+
+  // gastos por categoria
+  const byCat = {};
+  entries.filter(f => f.type === 'out').forEach(f => { byCat[f.cat || 'Outros'] = (byCat[f.cat || 'Outros'] || 0) + f.cents; });
+  const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+  const maxCat = cats[0]?.[1] || 1;
+  document.getElementById('catBars').innerHTML = cats.length ? cats.map(([cat, cents]) => `
+    <div class="sb-row">
+      <span class="sb-label">${esc(cat)}</span>
+      <div class="sb-track"><div class="sb-fill red" style="width:${Math.round(cents / maxCat * 100)}%"></div></div>
+      <span class="sb-num">${brl(cents)}</span>
+    </div>`).join('') : '<div class="empty">Sem gastos neste mês.</div>';
 
   document.querySelectorAll('.fin-edit').forEach(b => b.onclick = () => openFinModal(b.closest('li').dataset.id));
   document.querySelectorAll('.fin-del').forEach(b => b.onclick = () => {
     const id = b.closest('li').dataset.id;
     if (confirm('Excluir este lançamento?')) {
-      db.finance = db.finance.filter(f => f.id !== id);
+      db.finance.entries = db.finance.entries.filter(f => f.id !== id);
       save(); toast('Lançamento excluído'); renderFin();
     }
   });
@@ -310,6 +300,65 @@ function renderFin() {
 document.getElementById('finPrev').onclick = () => { finDate.setMonth(finDate.getMonth() - 1); renderFin(); };
 document.getElementById('finNext').onclick = () => { finDate.setMonth(finDate.getMonth() + 1); renderFin(); };
 document.getElementById('addFinBtn').onclick = () => openFinModal();
+document.getElementById('reserveBtn').onclick = openReserveModal;
+
+/* ---- Importação de extrato do Banco do Brasil (OFX / CSV) ---- */
+document.getElementById('bbImportBtn').onclick = () => document.getElementById('bbFile').click();
+document.getElementById('bbFile').onchange = e => {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const text = reader.result;
+    let txs = [];
+    if (/OFX|<STMTTRN>/i.test(text)) txs = parseOFX(text);
+    else txs = parseCSVExtrato(text);
+    if (!txs.length) { toast('Nenhuma transação reconhecida no arquivo'); return; }
+    // dedup: ignora transações idênticas já importadas
+    const seen = new Set(db.finance.entries.map(f => `${f.date}|${f.type}|${f.cents}|${f.desc}`));
+    let added = 0;
+    txs.forEach(t => {
+      const key = `${t.date}|${t.type}|${t.cents}|${t.desc}`;
+      if (!seen.has(key)) { db.finance.entries.push({ id: uid(), ...t }); seen.add(key); added++; }
+    });
+    save(); renderFin();
+    toast(added ? `${added} transação(ões) importada(s) do extrato` : 'Nada novo — extrato já estava importado');
+  };
+  reader.readAsText(file, 'ISO-8859-1');
+  e.target.value = '';
+};
+function parseOFX(text) {
+  const txs = [];
+  const blocks = text.split(/<STMTTRN>/i).slice(1);
+  blocks.forEach(b => {
+    const grab = tag => (b.match(new RegExp(`<${tag}>([^<\\r\\n]*)`, 'i')) || [])[1]?.trim();
+    const amt = parseCents((grab('TRNAMT') || '').replace(',', '.'));
+    const dt = grab('DTPOSTED') || '';
+    const date = `${dt.slice(0, 4)}-${dt.slice(4, 6)}-${dt.slice(6, 8)}`;
+    const desc = grab('MEMO') || grab('NAME') || 'Transação BB';
+    if (!isNaN(amt) && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      txs.push({ type: amt >= 0 ? 'in' : 'out', cents: Math.abs(amt), desc, cat: 'Outros', date });
+    }
+  });
+  return txs;
+}
+function parseCSVExtrato(text) {
+  // CSV do BB: colunas com data dd/mm/yyyy e valor; tolerante a variações
+  const txs = [];
+  text.split(/\r?\n/).forEach(line => {
+    const cols = line.split(/[;,](?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c => c.replace(/^"|"$/g, '').trim());
+    const dateCol = cols.find(c => /^\d{2}\/\d{2}\/\d{4}$/.test(c));
+    if (!dateCol) return;
+    const valCol = [...cols].reverse().find(c => /^-?[\d.]+,\d{2}$/.test(c) || /^-?\d+\.\d{2}$/.test(c));
+    if (!valCol) return;
+    const cents = parseCents(valCol);
+    if (isNaN(cents) || cents === 0) return;
+    const [d, m, y] = dateCol.split('/');
+    const desc = cols.filter(c => c && c !== dateCol && c !== valCol && !/^\d+$/.test(c)).join(' · ').slice(0, 80) || 'Transação BB';
+    if (/saldo/i.test(desc)) return; // linhas de saldo não são transações
+    txs.push({ type: cents >= 0 ? 'in' : 'out', cents: Math.abs(cents), desc, cat: 'Outros', date: `${y}-${m}-${d}` });
+  });
+  return txs;
+}
 
 /* ===========================================================
    PROTOCOLOS
@@ -318,8 +367,9 @@ function renderProtos() {
   const grid = document.getElementById('protoGrid');
   grid.innerHTML = db.protocols.length ? db.protocols.map(p => {
     const done = p.items.filter(i => i.done).length;
-    return `<div class="proto-card" data-id="${p.id}">
-      <h3>${esc(p.name)}</h3>
+    const complete = done === p.items.length && p.items.length > 0;
+    return `<div class="proto-card ${complete ? 'complete' : ''}" data-id="${p.id}">
+      <h3>${esc(p.name)} ${complete ? '✓' : ''}</h3>
       ${p.desc ? `<p>${esc(p.desc)}</p>` : ''}
       <ul class="proto-items">
         ${p.items.map(i => `<li class="${i.done ? 'done' : ''}">
@@ -328,21 +378,16 @@ function renderProtos() {
         </li>`).join('')}
       </ul>
       <div class="proto-foot">
-        <span class="proto-prog">${done}/${p.items.length} concluídos</span>
-        <button class="tc-mini proto-reset">↺ Reiniciar</button>
+        <span class="proto-prog">${done}/${p.items.length} hoje</span>
         <button class="tc-mini proto-edit">Editar</button>
       </div>
     </div>`;
-  }).join('') : `<div class="empty">Nenhum protocolo ainda. Crie checklists para rotinas que você repete.</div>`;
+  }).join('') : '<div class="empty">Nenhum protocolo.</div>';
 
   grid.querySelectorAll('input[data-item]').forEach(cb => cb.onchange = () => {
     const p = db.protocols.find(x => x.id === cb.closest('.proto-card').dataset.id);
     const item = p.items.find(i => i.id === cb.dataset.item);
     item.done = cb.checked; save(); renderProtos();
-  });
-  grid.querySelectorAll('.proto-reset').forEach(b => b.onclick = () => {
-    const p = db.protocols.find(x => x.id === b.closest('.proto-card').dataset.id);
-    p.items.forEach(i => i.done = false); save(); toast('Protocolo reiniciado'); renderProtos();
   });
   grid.querySelectorAll('.proto-edit').forEach(b => b.onclick = () => openProtoModal(b.closest('.proto-card').dataset.id));
 }
@@ -366,55 +411,59 @@ function field(label, name, type = 'text', value = '', opts = null) {
     const options = opts.map(o => `<option ${o === value ? 'selected' : ''}>${esc(o)}</option>`).join('');
     return `<div class="field"><label>${label}</label><select name="${name}">${options}</select></div>`;
   }
-  return `<div class="field"><label>${label}</label><input type="${type}" name="${name}" value="${v}" ${type === 'number' ? 'min="0" step="any"' : ''} /></div>`;
+  return `<div class="field"><label>${label}</label><input type="${type}" name="${name}" value="${v}" /></div>`;
 }
 function wireModal(onSubmit, onDelete) {
   overlay.hidden = false;
   modalForm.onsubmit = e => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(modalForm).entries());
-    onSubmit(data); closeModal();
+    onSubmit(data);
   };
   modalForm.querySelector('[data-cancel]').onclick = closeModal;
   const del = modalForm.querySelector('[data-del]');
   if (del && onDelete) del.onclick = () => { if (confirm('Excluir definitivamente?')) { onDelete(); closeModal(); } };
 }
 
-/* ---- Tarefa de trabalho ---- */
-function openWorkModal(id) {
-  const t = id ? db.work.find(x => x.id === id) : null;
-  modalTitle.textContent = t ? 'Editar tarefa' : 'Nova tarefa';
+/* ---- Registro de evolução (Trabalho) ---- */
+function openLearnModal(id, presetType) {
+  const e = id ? db.learn.find(x => x.id === id) : null;
+  modalTitle.textContent = e ? 'Editar registro' : 'Novo registro técnico';
+  const typeLabel = k => LEARN_TYPES.find(t => t.key === k)?.label;
   modalForm.innerHTML = `
-    ${field('Título', 'title', 'text', t?.title || '')}
-    ${field('Descrição', 'desc', 'textarea', t?.desc || '')}
-    <div class="field-row">
-      ${field('Prioridade', 'prio', 'select', t?.prio || 'media', PRIOS)}
-      ${field('Prazo', 'date', 'date', t?.date || '')}
-    </div>
-    ${field('Status', 'status', 'select', t ? STATUSES.find(s => s.key === t.status).label : 'A fazer', STATUSES.map(s => s.label))}
+    ${field('Tipo', 'type', 'select', typeLabel(e?.type || presetType || 'aprendi'), LEARN_TYPES.map(t => t.label))}
+    ${field('O quê', 'title', 'text', e?.title || '')}
+    ${field('Detalhes (opcional)', 'desc', 'textarea', e?.desc || '')}
+    ${field('Tecnologias/habilidades (separe por vírgula)', 'skills', 'text', (e?.skills || []).join(', '))}
+    ${field('Data', 'date', 'date', e?.date || todayStr())}
     <div class="modal-actions">
-      ${t ? '<button type="button" class="btn-del" data-del>Excluir</button>' : ''}
+      ${e ? '<button type="button" class="btn-del" data-del>Excluir</button>' : ''}
       <button type="button" class="btn-ghost" data-cancel>Cancelar</button>
-      <button type="submit" class="btn-primary">${t ? 'Salvar' : 'Criar'}</button>
+      <button type="submit" class="btn-primary">${e ? 'Salvar' : 'Registrar'}</button>
     </div>`;
   wireModal(data => {
-    if (!data.title.trim()) { toast('Dê um título primeiro'); return; }
-    const statusKey = STATUSES.find(s => s.label === data.status)?.key || 'todo';
-    if (t) Object.assign(t, { ...data, status: statusKey });
-    else db.work.push({ id: uid(), ...data, status: statusKey });
-    save(); toast(t ? 'Tarefa atualizada' : 'Tarefa criada'); refreshAll();
-  }, t && (() => { db.work = db.work.filter(x => x.id !== id); save(); toast('Tarefa excluída'); refreshAll(); }));
+    if (!data.title.trim()) { toast('Descreva o que você aprendeu/aprimorou/criou'); return; }
+    const entry = {
+      type: LEARN_TYPES.find(t => t.label === data.type)?.key || 'aprendi',
+      title: data.title.trim(), desc: data.desc.trim(),
+      skills: data.skills.split(',').map(s => s.trim()).filter(Boolean),
+      date: data.date || todayStr(),
+    };
+    if (e) Object.assign(e, entry);
+    else db.learn.push({ id: uid(), ...entry });
+    save(); toast(e ? 'Registro atualizado' : 'Evolução registrada'); closeModal(); refreshAll();
+  }, e && (() => { db.learn = db.learn.filter(x => x.id !== id); save(); toast('Registro excluído'); refreshAll(); }));
 }
 
 /* ---- Lançamento financeiro ---- */
 function openFinModal(id) {
-  const f = id ? db.finance.find(x => x.id === id) : null;
+  const f = id ? db.finance.entries.find(x => x.id === id) : null;
   modalTitle.textContent = f ? 'Editar lançamento' : 'Novo lançamento';
   modalForm.innerHTML = `
     ${field('Descrição', 'desc', 'text', f?.desc || '')}
     <div class="field-row">
       ${field('Tipo', 'type', 'select', f ? (f.type === 'in' ? 'Receita' : 'Gasto') : 'Gasto', ['Receita', 'Gasto'])}
-      ${field('Valor (R$)', 'amount', 'number', f?.amount || '')}
+      ${field('Valor (R$) — ex.: 1.234,56', 'amount', 'text', f ? (f.cents / 100).toFixed(2).replace('.', ',') : '')}
     </div>
     <div class="field-row">
       ${field('Categoria', 'cat', 'select', f?.cat || 'Outros', FIN_CATS)}
@@ -426,12 +475,32 @@ function openFinModal(id) {
       <button type="submit" class="btn-primary">${f ? 'Salvar' : 'Lançar'}</button>
     </div>`;
   wireModal(data => {
-    if (!data.desc.trim() || !data.amount) { toast('Preencha descrição e valor'); return; }
-    const entry = { desc: data.desc.trim(), type: data.type === 'Receita' ? 'in' : 'out', amount: +data.amount, cat: data.cat, date: data.date };
+    const cents = parseCents(data.amount);
+    if (!data.desc.trim()) { toast('Descreva o lançamento'); return; }
+    if (isNaN(cents) || cents <= 0) { toast('Valor inválido — use o formato 1.234,56'); return; }
+    const entry = { desc: data.desc.trim(), type: data.type === 'Receita' ? 'in' : 'out', cents, cat: data.cat, date: data.date };
     if (f) Object.assign(f, entry);
-    else db.finance.push({ id: uid(), ...entry });
-    save(); toast(f ? 'Lançamento atualizado' : 'Lançamento registrado'); refreshAll();
-  }, f && (() => { db.finance = db.finance.filter(x => x.id !== id); save(); toast('Lançamento excluído'); refreshAll(); }));
+    else db.finance.entries.push({ id: uid(), ...entry });
+    save(); toast(f ? 'Lançamento atualizado' : 'Lançamento registrado'); closeModal(); refreshAll();
+  }, f && (() => { db.finance.entries = db.finance.entries.filter(x => x.id !== id); save(); toast('Lançamento excluído'); refreshAll(); }));
+}
+
+/* ---- Reserva ---- */
+function openReserveModal() {
+  modalTitle.textContent = 'Reserva financeira';
+  modalForm.innerHTML = `
+    ${field('Valor da reserva (R$)', 'reserve', 'text', (db.finance.reserveCents / 100).toFixed(2).replace('.', ','))}
+    <p class="muted">A reserva é o seu ponto de partida. O patrimônio total = reserva + (receitas − gastos) registrados.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" data-cancel>Cancelar</button>
+      <button type="submit" class="btn-primary">Salvar</button>
+    </div>`;
+  wireModal(data => {
+    const cents = parseCents(data.reserve);
+    if (isNaN(cents) || cents < 0) { toast('Valor inválido'); return; }
+    db.finance.reserveCents = cents;
+    save(); toast('Reserva atualizada'); closeModal(); refreshAll();
+  });
 }
 
 /* ---- Protocolo ---- */
@@ -472,8 +541,8 @@ function openProtoModal(id) {
       return { id: existing?.id || uid(), text, done: existing?.done || false };
     });
     if (p) Object.assign(p, { name: data.name.trim(), desc: data.desc.trim(), items: newItems });
-    else db.protocols.push({ id: uid(), name: data.name.trim(), desc: data.desc.trim(), items: newItems });
-    save(); toast(p ? 'Protocolo atualizado' : 'Protocolo criado'); refreshAll();
+    else db.protocols.push({ id: uid(), name: data.name.trim(), desc: data.desc.trim(), daily: true, lastReset: todayStr(), items: newItems });
+    save(); toast(p ? 'Protocolo atualizado' : 'Protocolo criado'); closeModal(); refreshAll();
   }, p && (() => { db.protocols = db.protocols.filter(x => x.id !== id); save(); toast('Protocolo excluído'); refreshAll(); }));
 }
 function itemRow(text) {
@@ -487,7 +556,7 @@ function wireItemRows(editor) {
 }
 
 /* ===========================================================
-   EXPORTAR / IMPORTAR
+   EXPORTAR / IMPORTAR (backup completo)
    =========================================================== */
 document.getElementById('exportBtn').onclick = () => {
   const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
@@ -504,11 +573,12 @@ document.getElementById('importFile').onchange = e => {
   reader.onload = () => {
     try {
       const data = JSON.parse(reader.result);
-      if (!data.work || !data.studies) throw new Error();
+      if (!data.finance || !data.protocols) throw new Error();
       db = data; save(); toast('Dados importados'); refreshAll();
     } catch { toast('Arquivo inválido'); }
   };
   reader.readAsText(file);
+  e.target.value = '';
 };
 
 /* ===========================================================
@@ -526,7 +596,6 @@ function toast(msg) {
    BOOT
    =========================================================== */
 (function init() {
-  // tema (escuro por padrão)
   if (localStorage.getItem('planner_theme') === 'light') document.documentElement.dataset.theme = 'light';
   const tBtn = document.getElementById('themeToggle');
   const setThemeLabel = () => tBtn.textContent = document.documentElement.dataset.theme === 'light' ? '🌙 Modo escuro' : '☀ Modo claro';
@@ -543,7 +612,6 @@ function toast(msg) {
   const now = new Date();
   document.getElementById('todayChip').textContent =
     `${now.getDate()} de ${MONTHS[now.getMonth()]} de ${now.getFullYear()}`;
-  document.querySelector('#studyQuickForm [name="date"]').value = todayStr();
   document.getElementById('viewSub').textContent = TITLES.hoje[1];
   renderHoje();
 })();

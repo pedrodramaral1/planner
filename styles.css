@@ -253,28 +253,64 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 }
 .tc-mini:hover { color: var(--text); }
 
-/* ===== estudos ===== */
-.quick-form { display: flex; flex-direction: column; gap: 10px; }
-.quick-form .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.session-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.session-list li {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 14px;
-  background: var(--panel-2);
-  border-radius: 10px;
-  font-size: 13.5px;
+/* ===== trabalho: registro semanal ===== */
+.week-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.week-toolbar h2 { font-size: 16px; font-weight: 700; min-width: 200px; text-align: center; }
+.learn-lists { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 18px; align-items: start; }
+.learn-col {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 10px;
 }
-.sess-date {
-  font-size: 12px; color: var(--muted);
-  min-width: 52px;
-}
-.sess-min {
-  background: var(--accent-soft); color: var(--accent);
+.learn-col-head { display: flex; align-items: center; justify-content: space-between; }
+.learn-hint { font-size: 12px; color: var(--muted); }
+.lt-badge {
   font-size: 12px; font-weight: 700;
-  padding: 3px 9px; border-radius: 99px;
+  padding: 4px 11px; border-radius: 99px;
   white-space: nowrap;
 }
-.sess-notes { color: var(--muted); font-size: 12.5px; flex: 1; }
+.lt-badge.aprendi { background: var(--accent-soft); color: var(--accent); }
+.lt-badge.aprimorei { background: var(--amber-soft); color: var(--amber); }
+.lt-badge.criei { background: var(--green-soft); color: var(--green); }
+.learn-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.learn-list li {
+  display: flex; gap: 10px;
+  padding: 11px 13px;
+  background: var(--panel-2);
+  border-radius: 10px;
+}
+.ll-main { flex: 1; min-width: 0; }
+.ll-main strong { font-size: 13.5px; display: block; }
+.ll-main p { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.ll-skills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.skill-tag {
+  font-size: 11px; font-weight: 600;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 2px 8px; border-radius: 99px;
+  color: var(--muted);
+}
+.ll-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; font-size: 12px; flex-shrink: 0; }
+.learn-add { text-align: center; }
+
+/* barras (radar técnico + categorias) */
+.skill-bars { display: flex; flex-direction: column; gap: 9px; }
+.sb-row { display: grid; grid-template-columns: 130px 1fr auto; align-items: center; gap: 12px; }
+.sb-label { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-track { height: 9px; background: var(--panel-2); border-radius: 99px; overflow: hidden; }
+.sb-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #7b5cff); border-radius: 99px; }
+.sb-fill.red { background: linear-gradient(90deg, var(--red), #ff9d6b); }
+.sb-num { font-size: 12px; color: var(--muted); font-weight: 700; min-width: 24px; text-align: right; }
+
+/* agenda google */
+.gcal-frame {
+  width: 100%; height: 480px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
 
 /* ===== financeiro ===== */
 .fin-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
@@ -308,6 +344,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
   padding: 18px;
   display: flex; flex-direction: column; gap: 10px;
 }
+.proto-card.complete { border-color: var(--green); }
 .proto-card h3 { font-size: 15px; font-weight: 700; }
 .proto-card > p { font-size: 12.5px; color: var(--muted); }
 .proto-items { list-style: none; display: flex; flex-direction: column; gap: 6px; }
@@ -381,4 +418,6 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
   .main { padding: 18px 16px 50px; }
   .grid-2 { grid-template-columns: 1fr; }
   .board { grid-template-columns: 1fr; }
+  .learn-lists { grid-template-columns: 1fr; }
+  .sb-row { grid-template-columns: 90px 1fr auto; }
 }

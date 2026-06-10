@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=1" />
+  <link rel="stylesheet" href="styles.css?v=2" />
 </head>
 <body>
   <!-- ===== SIDEBAR ===== -->
@@ -23,7 +23,6 @@
     <nav class="nav">
       <button class="nav-item active" data-view="hoje"><span class="nv-ico">◈</span> Hoje</button>
       <button class="nav-item" data-view="trabalho"><span class="nv-ico">▣</span> Trabalho</button>
-      <button class="nav-item" data-view="estudos"><span class="nv-ico">✎</span> Estudos</button>
       <button class="nav-item" data-view="financeiro"><span class="nv-ico">$</span> Financeiro</button>
       <button class="nav-item" data-view="protocolos"><span class="nv-ico">☰</span> Protocolos</button>
     </nav>
@@ -54,69 +53,49 @@
       <div class="kpis" id="hojeKpis"></div>
       <div class="grid-2">
         <div class="card">
-          <div class="card-head"><h2>Tarefas pendentes</h2><button class="btn-soft" data-go="trabalho">ver tudo →</button></div>
-          <ul class="mini-list" id="hojeTarefas"></ul>
+          <div class="card-head">
+            <h2>Protocolos de hoje</h2>
+            <button class="btn-soft" data-go="protocolos">ver tudo →</button>
+          </div>
+          <ul class="proto-items" id="hojeProtocolos"></ul>
         </div>
         <div class="card">
-          <div class="card-head"><h2>Estudo desta semana</h2><button class="btn-soft" data-go="estudos">ver tudo →</button></div>
-          <div class="progress-wrap">
-            <div class="progress-bar"><div class="progress-fill" id="hojeStudyFill"></div></div>
-            <span id="hojeStudyLabel" class="muted"></span>
+          <div class="card-head">
+            <h2>Evolução técnica da semana</h2>
+            <button class="btn-soft" data-go="trabalho">ver tudo →</button>
           </div>
-          <ul class="mini-list" id="hojeEstudos"></ul>
+          <ul class="mini-list" id="hojeAprendizados"></ul>
         </div>
       </div>
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-head"><h2>Mês financeiro</h2><button class="btn-soft" data-go="financeiro">ver tudo →</button></div>
-          <div class="fin-mini" id="hojeFin"></div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Agenda do dia · Google Calendar</h2>
+          <a class="btn-soft" href="https://calendar.google.com/calendar/u/0/r/day" target="_blank" rel="noopener">abrir no Google ↗</a>
         </div>
-        <div class="card">
-          <div class="card-head"><h2>Protocolos</h2><button class="btn-soft" data-go="protocolos">ver tudo →</button></div>
-          <ul class="mini-list" id="hojeProtocolos"></ul>
-        </div>
+        <iframe id="gcalFrame" class="gcal-frame" loading="lazy"
+          src="https://calendar.google.com/calendar/embed?src=pedroamaralff1%40gmail.com&ctz=America%2FSao_Paulo&mode=AGENDA&showTitle=0&showPrint=0&showTabs=0&showCalendars=0&wkst=1&hl=pt_BR"></iframe>
+        <p class="hint">Se a agenda não carregar, faça login no Google neste navegador e recarregue.</p>
       </div>
     </section>
 
     <!-- VIEW: TRABALHO -->
     <section class="view" id="view-trabalho">
-      <div class="board-filters">
-        <input type="search" id="workSearch" placeholder="Buscar tarefa..." />
-        <button class="btn-primary" id="addWorkBtn">+ Nova tarefa</button>
+      <div class="week-toolbar">
+        <button class="btn-icon" id="weekPrev">‹</button>
+        <h2 id="weekLabel"></h2>
+        <button class="btn-icon" id="weekNext">›</button>
+        <button class="btn-ghost" id="weekToday">Semana atual</button>
+        <button class="btn-primary" id="addLearnBtn" style="margin-left:auto">+ Novo registro</button>
       </div>
-      <div class="board" id="workBoard"></div>
-    </section>
 
-    <!-- VIEW: ESTUDOS -->
-    <section class="view" id="view-estudos">
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-head">
-            <h2>Meta semanal</h2>
-            <button class="btn-soft" id="editGoalBtn">⚙ Ajustar meta</button>
-          </div>
-          <div class="progress-wrap">
-            <div class="progress-bar"><div class="progress-fill" id="studyFill"></div></div>
-            <span id="studyLabel" class="muted"></span>
-          </div>
-          <div id="studyBySubject" class="status-break"></div>
-        </div>
-        <div class="card">
-          <div class="card-head"><h2>Registrar sessão</h2></div>
-          <form id="studyQuickForm" class="quick-form">
-            <input type="text" name="subject" placeholder="Matéria / tópico" required />
-            <div class="field-row">
-              <input type="number" name="minutes" placeholder="Minutos" min="1" required />
-              <input type="date" name="date" required />
-            </div>
-            <input type="text" name="notes" placeholder="Notas (opcional)" />
-            <button type="submit" class="btn-primary">+ Registrar</button>
-          </form>
-        </div>
-      </div>
+      <div class="learn-lists" id="learnLists"></div>
+
       <div class="card">
-        <div class="card-head"><h2>Histórico de sessões</h2></div>
-        <ul class="session-list" id="sessionList"></ul>
+        <div class="card-head">
+          <h2>Radar técnico</h2>
+          <span class="muted">acumulado de todos os registros, por tecnologia/habilidade</span>
+        </div>
+        <div class="skill-bars" id="skillBars"></div>
       </div>
     </section>
 
@@ -126,19 +105,28 @@
         <button class="btn-icon" id="finPrev">‹</button>
         <h2 id="finMonthLabel"></h2>
         <button class="btn-icon" id="finNext">›</button>
+        <button class="btn-soft" id="reserveBtn">⚙ Reserva</button>
+        <button class="btn-soft" id="bbImportBtn">⬆ Importar extrato BB</button>
+        <input type="file" id="bbFile" accept=".ofx,.csv,.txt" hidden />
         <button class="btn-primary" id="addFinBtn" style="margin-left:auto">+ Novo lançamento</button>
       </div>
       <div class="kpis" id="finKpis"></div>
-      <div class="card">
-        <div class="card-head"><h2>Lançamentos do mês</h2></div>
-        <ul class="fin-list" id="finList"></ul>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>Lançamentos do mês</h2></div>
+          <ul class="fin-list" id="finList"></ul>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Gastos por categoria</h2><span class="muted" id="catMonthLabel"></span></div>
+          <div class="skill-bars" id="catBars"></div>
+        </div>
       </div>
     </section>
 
     <!-- VIEW: PROTOCOLOS -->
     <section class="view" id="view-protocolos">
       <div class="view-head">
-        <p class="muted">Checklists reutilizáveis para rotinas que se repetem.</p>
+        <p class="muted">Protocolos diários — reiniciam automaticamente a cada novo dia.</p>
         <button class="btn-primary" id="addProtoBtn">+ Novo protocolo</button>
       </div>
       <div class="cards-grid" id="protoGrid"></div>
@@ -158,6 +146,6 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="app.js?v=1"></script>
+  <script src="app.js?v=2"></script>
 </body>
 </html>
