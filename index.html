@@ -6,8 +6,8 @@
   <title>Planner · Pedro</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=2" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=3" />
 </head>
 <body>
   <!-- ===== SIDEBAR ===== -->
@@ -16,7 +16,7 @@
       <div class="brand-mark">P</div>
       <div class="brand-text">
         <strong>Planner</strong>
-        <span>pessoal</span>
+        <span>sistema pessoal</span>
       </div>
     </div>
 
@@ -26,6 +26,14 @@
       <button class="nav-item" data-view="financeiro"><span class="nv-ico">$</span> Financeiro</button>
       <button class="nav-item" data-view="protocolos"><span class="nv-ico">☰</span> Protocolos</button>
     </nav>
+
+    <button class="brain-btn" id="brainBtn">
+      <span class="brain-ico">🧠</span>
+      <span>
+        <strong>Cérebro</strong>
+        <small>contexto geral, sempre à mão</small>
+      </span>
+    </button>
 
     <div class="sidebar-foot">
       <button class="btn-ghost" id="themeToggle">☀ Modo claro</button>
@@ -40,8 +48,8 @@
   <main class="main">
     <header class="topbar">
       <div>
+        <p class="eyebrow" id="viewEyebrow">painel pessoal</p>
         <h1 id="viewTitle">Hoje</h1>
-        <p class="subtitle" id="viewSub"></p>
       </div>
       <div class="topbar-actions">
         <span class="today-chip" id="todayChip"></span>
@@ -61,10 +69,10 @@
         </div>
         <div class="card">
           <div class="card-head">
-            <h2>Evolução técnica da semana</h2>
-            <button class="btn-soft" data-go="trabalho">ver tudo →</button>
+            <h2>Semana em andamento</h2>
+            <button class="btn-soft" data-go="trabalho">abrir diário →</button>
           </div>
-          <ul class="mini-list" id="hojeAprendizados"></ul>
+          <ul class="mini-list" id="hojeSemana"></ul>
         </div>
       </div>
       <div class="card">
@@ -78,22 +86,55 @@
       </div>
     </section>
 
-    <!-- VIEW: TRABALHO -->
+    <!-- VIEW: TRABALHO (diário semanal) -->
     <section class="view" id="view-trabalho">
       <div class="week-toolbar">
         <button class="btn-icon" id="weekPrev">‹</button>
-        <h2 id="weekLabel"></h2>
+        <div class="week-title">
+          <h2 id="weekLabel"></h2>
+          <span class="muted" id="weekRangeLabel"></span>
+        </div>
         <button class="btn-icon" id="weekNext">›</button>
         <button class="btn-ghost" id="weekToday">Semana atual</button>
-        <button class="btn-primary" id="addLearnBtn" style="margin-left:auto">+ Novo registro</button>
+        <button class="btn-primary" id="addTaskBtn" style="margin-left:auto">+ Nova tarefa</button>
       </div>
 
-      <div class="learn-lists" id="learnLists"></div>
+      <div class="card doc-card">
+        <div class="card-head">
+          <h2>Documento da semana</h2>
+          <button class="btn-soft" id="editDocBtn">✎ Escrever</button>
+        </div>
+        <article class="doc-body" id="docBody"></article>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Tarefas da semana</h2>
+          <span class="muted" id="weekStats"></span>
+        </div>
+        <div class="wtable-wrap">
+          <table class="wtable">
+            <thead>
+              <tr>
+                <th class="col-title">Tarefa</th>
+                <th>Tipo</th>
+                <th>Data</th>
+                <th title="Marcar para revisar depois">Revisar</th>
+                <th>Tempo</th>
+                <th>Link</th>
+                <th>Tags</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="wtableBody"></tbody>
+          </table>
+        </div>
+      </div>
 
       <div class="card">
         <div class="card-head">
           <h2>Radar técnico</h2>
-          <span class="muted">acumulado de todos os registros, por tecnologia/habilidade</span>
+          <span class="muted">acumulado de todas as semanas, por tecnologia</span>
         </div>
         <div class="skill-bars" id="skillBars"></div>
       </div>
@@ -133,6 +174,29 @@
     </section>
   </main>
 
+  <!-- ===== CÉREBRO (overlay lateral) ===== -->
+  <div class="brain-overlay" id="brainOverlay" hidden>
+    <div class="brain-panel">
+      <div class="brain-head">
+        <div>
+          <p class="eyebrow">sempre presente</p>
+          <h3>🧠 Cérebro</h3>
+        </div>
+        <div class="brain-actions">
+          <button class="btn-soft" id="brainEditBtn">✎ Editar</button>
+          <button class="btn-icon" id="brainClose">✕</button>
+        </div>
+      </div>
+      <article class="doc-body" id="brainBody"></article>
+      <textarea id="brainEditor" class="brain-editor" hidden
+        placeholder="# Quem eu sou&#10;Objetivos, princípios, contexto dos projetos...&#10;&#10;## Metas 2026&#10;- ..."></textarea>
+      <div class="brain-foot" id="brainFoot" hidden>
+        <span class="muted">Markdown simples: # título, ## seção, - lista, **negrito**</span>
+        <button class="btn-primary" id="brainSaveBtn">Salvar cérebro</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== MODAL ===== -->
   <div class="modal-overlay" id="modalOverlay" hidden>
     <div class="modal" id="modal">
@@ -146,6 +210,6 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="app.js?v=2"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>

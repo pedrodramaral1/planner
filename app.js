@@ -1,17 +1,17 @@
 /* ===========================================================
    Planner pessoal · Pedro
    Tudo client-side, persistido em localStorage.
-   Valores financeiros armazenados em CENTAVOS (inteiros) —
-   nunca em float — para precisão absoluta.
+   Valores financeiros em CENTAVOS (inteiros) — nunca float.
+   Trabalho = diário semanal: documento escrito + tabela de tarefas.
+   Cérebro = documento-mestre de contexto, acessível de qualquer aba.
    =========================================================== */
 
 const STORE_KEY = 'planner_v2';
-const LEGACY_KEY = 'planner_v1';
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-const LEARN_TYPES = [
-  { key: 'aprendi',   label: 'Aprendi',   ico: '◎', hint: 'Conhecimento novo que entrou no repertório' },
-  { key: 'aprimorei', label: 'Aprimorei', ico: '◈', hint: 'Habilidade existente que ficou mais afiada' },
-  { key: 'criei',     label: 'Criei',     ico: '✦', hint: 'Algo que saiu das suas mãos: projeto, automação, solução' },
+const TASK_TYPES = [
+  { key: 'aprendi',   label: 'Aprendi' },
+  { key: 'aprimorei', label: 'Aprimorei' },
+  { key: 'criei',     label: 'Criei' },
 ];
 const FIN_CATS = ['Salário', 'Extra', 'Moradia', 'Alimentação', 'Transporte', 'Saúde', 'Estudos', 'Lazer', 'Assinaturas', 'Outros'];
 const DEFAULT_PROTOCOLS = [
@@ -20,12 +20,24 @@ const DEFAULT_PROTOCOLS = [
   { name: 'Protocolo 3 · Hidratação', desc: 'Garrafa ou copo de água sempre por perto.', items: ['Água ao acordar', 'Água antes de dormir'] },
   { name: 'Protocolo 4 · Disciplina', desc: 'Cumprir o primeiro protocolo.', items: ['Protocolo 1 cumprido'] },
 ];
+const DOC_TEMPLATE = `# Semana
+
+## Aprendi
+-
+
+## Aprimorei
+-
+
+## Criei
+-
+
+## Reflexão da semana
+`;
 
 /* ---------- moeda: centavos <-> texto ---------- */
 const BRLfmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 function brl(cents) { return BRLfmt.format(cents / 100); }
 function parseCents(str) {
-  // aceita "1.234,56", "1234,56", "1234.56", "1234"
   if (typeof str === 'number') return Math.round(str * 100);
   let s = String(str || '').trim().replace(/[R$\s]/g, '');
   if (!s) return NaN;
@@ -52,26 +64,26 @@ function load() {
 }
 function blank() {
   return {
-    learn: [],
+    weeks: {},   // chave = ISO do domingo da semana -> { doc, tasks: [] }
+    brain: '',
     finance: { reserveCents: 400000, entries: [] }, // R$ 4.000,00 de reserva
     protocols: [],
   };
 }
 function migrate() {
-  // v1 -> v2: aproveita lançamentos financeiros antigos (eram float em `amount`)
-  try {
-    const old = JSON.parse(localStorage.getItem(LEGACY_KEY) || 'null');
-    if (old && !db._migratedV1) {
-      (old.finance || []).forEach(f => {
-        db.finance.entries.push({
-          id: f.id || uid(), type: f.type, desc: f.desc, cat: f.cat || 'Outros',
-          cents: Math.round((+f.amount || 0) * 100), date: f.date,
-        });
+  if (!db.weeks) db.weeks = {};
+  if (db.brain === undefined) db.brain = '';
+  // v2 antigo: learn[] -> tasks da semana correspondente
+  if (Array.isArray(db.learn)) {
+    db.learn.forEach(e => {
+      const wk = getWeek(new Date(e.date + 'T00:00'));
+      wk.tasks.push({
+        id: e.id || uid(), title: e.title, type: e.type, date: e.date,
+        review: false, timeMin: null, link: '', tags: e.skills || [], notes: e.desc || '',
       });
-      db._migratedV1 = true;
-    }
-  } catch (e) {}
-  // garante os protocolos padrão (sem duplicar)
+    });
+    delete db.learn;
+  }
   DEFAULT_PROTOCOLS.forEach(dp => {
     if (!db.protocols.some(p => p.name === dp.name)) {
       db.protocols.push({
@@ -80,7 +92,6 @@ function migrate() {
       });
     }
   });
-  // reset diário dos protocolos
   const today = todayStr();
   db.protocols.forEach(p => {
     if (p.daily && p.lastReset !== today) {
@@ -97,14 +108,66 @@ function localISO(d) {
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 
+/* ---------- semanas ---------- */
+function weekStart(d) {
+  const x = new Date(d); x.setHours(0, 0, 0, 0);
+  x.setDate(x.getDate() - x.getDay()); // domingo
+  return x;
+}
+function weekKey(d) { return localISO(weekStart(d)); }
+function getWeek(d) {
+  const k = weekKey(d);
+  if (!db.weeks[k]) db.weeks[k] = { doc: '', tasks: [] };
+  return db.weeks[k];
+}
+function weekNumber(d) {
+  // número ISO da semana
+  const x = new Date(d); x.setHours(0, 0, 0, 0);
+  x.setDate(x.getDate() + 3 - ((x.getDay() + 6) % 7));
+  const jan4 = new Date(x.getFullYear(), 0, 4);
+  return 1 + Math.round(((x - jan4) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
+}
+
+/* ===========================================================
+   MARKDOWN simples (seguro: tudo escapado antes)
+   =========================================================== */
+function mdInline(s) {
+  return s
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+}
+function md(src) {
+  if (!src || !src.trim()) return '';
+  const lines = esc(src).split(/\r?\n/);
+  let html = '', inList = false;
+  const closeList = () => { if (inList) { html += '</ul>'; inList = false; } };
+  for (const ln of lines) {
+    if (/^\s*[-•] /.test(ln)) {
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += `<li>${mdInline(ln.replace(/^\s*[-•] /, ''))}</li>`;
+      continue;
+    }
+    closeList();
+    if (/^### /.test(ln)) html += `<h4>${mdInline(ln.slice(4))}</h4>`;
+    else if (/^## /.test(ln)) html += `<h3>${mdInline(ln.slice(3))}</h3>`;
+    else if (/^# /.test(ln)) html += `<h2>${mdInline(ln.slice(2))}</h2>`;
+    else if (/^---+\s*$/.test(ln)) html += '<hr>';
+    else if (ln.trim() === '') html += '';
+    else html += `<p>${mdInline(ln)}</p>`;
+  }
+  closeList();
+  return html;
+}
+
 /* ===========================================================
    NAVEGAÇÃO
    =========================================================== */
 const TITLES = {
-  hoje:       ['Hoje', 'Protocolos, agenda e evolução do dia'],
-  trabalho:   ['Trabalho', 'Registro semanal do que você aprendeu, aprimorou e criou'],
-  financeiro: ['Financeiro', 'Reserva, receitas e gastos com precisão de centavos'],
-  protocolos: ['Protocolos', 'Rotinas diárias inegociáveis'],
+  hoje:       ['Hoje', 'painel pessoal'],
+  trabalho:   ['Trabalho', 'diário de evolução técnica'],
+  financeiro: ['Financeiro', 'precisão de centavos'],
+  protocolos: ['Protocolos', 'rotinas inegociáveis'],
 };
 
 document.querySelectorAll('.nav-item').forEach(btn => {
@@ -114,9 +177,9 @@ function switchView(v) {
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === v));
   document.querySelectorAll('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + v));
   document.getElementById('viewTitle').textContent = TITLES[v][0];
-  document.getElementById('viewSub').textContent = TITLES[v][1];
+  document.getElementById('viewEyebrow').textContent = TITLES[v][1];
   if (v === 'hoje') renderHoje();
-  if (v === 'trabalho') renderLearn();
+  if (v === 'trabalho') renderWeek();
   if (v === 'financeiro') renderFin();
   if (v === 'protocolos') renderProtos();
 }
@@ -127,28 +190,10 @@ function refreshAll() {
 document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => switchView(b.dataset.go));
 
 /* ===========================================================
-   SEMANAS (domingo a sábado)
-   =========================================================== */
-function weekStart(d) {
-  const x = new Date(d); x.setHours(0, 0, 0, 0);
-  x.setDate(x.getDate() - x.getDay());
-  return x;
-}
-function weekRange(d) {
-  const start = weekStart(d);
-  const end = new Date(start); end.setDate(start.getDate() + 6);
-  return [localISO(start), localISO(end)];
-}
-function entriesOfWeek(d) {
-  const [a, b] = weekRange(d);
-  return db.learn.filter(e => e.date >= a && e.date <= b);
-}
-
-/* ===========================================================
    HOJE
    =========================================================== */
 function renderHoje() {
-  const wk = entriesOfWeek(new Date());
+  const wk = getWeek(new Date());
   const fin = monthEntries(new Date());
   const exp = fin.filter(f => f.type === 'out').reduce((a, f) => a + f.cents, 0);
   const totalCents = db.finance.reserveCents + db.finance.entries.reduce((a, f) => a + (f.type === 'in' ? f.cents : -f.cents), 0);
@@ -156,13 +201,12 @@ function renderHoje() {
   const doneItems = allItems.filter(i => i.done).length;
 
   document.getElementById('hojeKpis').innerHTML = `
-    ${kpi('blue', wk.length, 'Registros técnicos na semana')}
+    ${kpi('blue', wk.tasks.length, 'Tarefas na semana')}
     ${kpi(doneItems === allItems.length && allItems.length ? 'green' : 'amber', `${doneItems}/${allItems.length}`, 'Protocolos de hoje')}
-    ${kpi(totalCents >= 0 ? 'green' : 'red', brl(totalCents), 'Patrimônio (reserva + fluxo)')}
+    ${kpi(totalCents >= 0 ? 'green' : 'red', brl(totalCents), 'Patrimônio')}
     ${kpi('red', brl(exp), 'Gastos no mês')}
   `;
 
-  // protocolos interativos direto no dashboard
   document.getElementById('hojeProtocolos').innerHTML = db.protocols.map(p =>
     p.items.map(i => `<li class="${i.done ? 'done' : ''}">
       <input type="checkbox" data-proto="${p.id}" data-item="${i.id}" ${i.done ? 'checked' : ''} />
@@ -176,59 +220,70 @@ function renderHoje() {
     item.done = cb.checked; save(); renderHoje();
   });
 
-  // aprendizados da semana
-  const recent = [...wk].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
-  document.getElementById('hojeAprendizados').innerHTML = recent.length ? recent.map(e => {
-    const t = LEARN_TYPES.find(t => t.key === e.type);
-    return `<li><span class="lt-badge ${e.type}">${t.ico} ${t.label}</span><span style="flex:1">${esc(e.title)}</span></li>`;
-  }).join('') : '<li class="empty">Nada registrado esta semana ainda.</li>';
+  const recent = [...wk.tasks].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 5);
+  document.getElementById('hojeSemana').innerHTML = recent.length ? recent.map(t =>
+    `<li><span class="badge-type ${t.type}">${typeLabel(t.type)}</span><span style="flex:1">${esc(t.title)}</span>${t.review ? '<span class="badge-review">revisar</span>' : ''}</li>`
+  ).join('') : '<li class="empty">Semana ainda em branco — abra o diário e registre.</li>';
 }
 function kpi(cls, val, label) {
   return `<div class="kpi ${cls}"><div class="kpi-val">${val}</div><div class="kpi-label">${label}</div></div>`;
 }
+function typeLabel(k) { return TASK_TYPES.find(t => t.key === k)?.label || k; }
 
 /* ===========================================================
-   TRABALHO — registro semanal de evolução técnica
+   TRABALHO — diário semanal
    =========================================================== */
-function renderLearn() {
-  const [a, b] = weekRange(weekRef);
-  const da = new Date(a + 'T00:00'), dbb = new Date(b + 'T00:00');
-  document.getElementById('weekLabel').textContent =
-    `${da.getDate()} ${MONTHS[da.getMonth()].slice(0,3)} – ${dbb.getDate()} ${MONTHS[dbb.getMonth()].slice(0,3)} ${dbb.getFullYear()}`;
+function renderWeek() {
+  const start = weekStart(weekRef);
+  const end = new Date(start); end.setDate(start.getDate() + 6);
+  const wk = getWeek(weekRef);
 
-  const wk = entriesOfWeek(weekRef);
-  document.getElementById('learnLists').innerHTML = LEARN_TYPES.map(t => {
-    const items = wk.filter(e => e.type === t.key).sort((x, y) => y.date.localeCompare(x.date));
-    return `<div class="learn-col">
-      <div class="learn-col-head"><span class="lt-badge ${t.key}">${t.ico} ${t.label}</span><span class="count">${items.length}</span></div>
-      <p class="learn-hint">${t.hint}</p>
-      <ul class="learn-list">
-        ${items.map(e => `<li data-id="${e.id}">
-          <div class="ll-main">
-            <strong>${esc(e.title)}</strong>
-            ${e.desc ? `<p>${esc(e.desc)}</p>` : ''}
-            ${(e.skills || []).length ? `<div class="ll-skills">${e.skills.map(s => `<span class="skill-tag">${esc(s)}</span>`).join('')}</div>` : ''}
-          </div>
-          <div class="ll-side">
-            <span class="muted">${e.date.slice(8,10)}/${e.date.slice(5,7)}</span>
-            <button class="tc-mini ll-edit">Editar</button>
-          </div>
-        </li>`).join('') || '<li class="empty">Sem registros nesta semana.</li>'}
-      </ul>
-      <button class="btn-soft learn-add" data-type="${t.key}">+ ${t.label.toLowerCase()} algo</button>
-    </div>`;
-  }).join('');
+  document.getElementById('weekLabel').textContent = `Semana ${weekNumber(weekRef)}`;
+  document.getElementById('weekRangeLabel').textContent =
+    `${start.getDate()} ${MONTHS[start.getMonth()].slice(0,3).toLowerCase()} – ${end.getDate()} ${MONTHS[end.getMonth()].slice(0,3).toLowerCase()} ${end.getFullYear()}`;
 
-  document.querySelectorAll('.learn-add').forEach(b => b.onclick = () => openLearnModal(null, b.dataset.type));
-  document.querySelectorAll('.ll-edit').forEach(b => b.onclick = () => openLearnModal(b.closest('li').dataset.id));
+  // documento
+  const body = document.getElementById('docBody');
+  if (wk.doc && wk.doc.trim()) {
+    body.innerHTML = md(wk.doc);
+    body.classList.remove('doc-empty');
+  } else {
+    body.innerHTML = `<p class="doc-placeholder">Esta semana ainda não foi escrita.<br/>Clique em <strong>✎ Escrever</strong> e registre em texto corrido o que você aprendeu, aprimorou e criou — como um diário de bordo.</p>`;
+    body.classList.add('doc-empty');
+  }
+
+  // tabela de tarefas
+  const tasks = [...wk.tasks].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const tbody = document.getElementById('wtableBody');
+  tbody.innerHTML = tasks.length ? tasks.map(t => `
+    <tr data-id="${t.id}">
+      <td class="col-title"><strong>${esc(t.title)}</strong>${t.notes ? `<small>${esc(t.notes)}</small>` : ''}</td>
+      <td><span class="badge-type ${t.type}">${typeLabel(t.type)}</span></td>
+      <td class="td-date">${t.date ? `${t.date.slice(8,10)}/${t.date.slice(5,7)}` : '—'}</td>
+      <td class="td-center"><input type="checkbox" class="t-review" ${t.review ? 'checked' : ''} /></td>
+      <td class="td-date">${t.timeMin ? t.timeMin + ' min' : '—'}</td>
+      <td class="td-center">${t.link ? `<a class="t-link" href="${esc(t.link)}" target="_blank" rel="noopener">↗</a>` : '—'}</td>
+      <td>${(t.tags || []).map(s => `<span class="skill-tag">${esc(s)}</span>`).join(' ')}</td>
+      <td class="td-center"><button class="tc-mini t-edit">✎</button></td>
+    </tr>`).join('') : '<tr><td colspan="8" class="empty">Nenhuma tarefa nesta semana.</td></tr>';
+
+  const rev = wk.tasks.filter(t => t.review).length;
+  document.getElementById('weekStats').textContent =
+    wk.tasks.length ? `${wk.tasks.length} tarefa(s) · ${rev} para revisar` : '';
+
+  tbody.querySelectorAll('.t-review').forEach(cb => cb.onchange = () => {
+    const t = wk.tasks.find(x => x.id === cb.closest('tr').dataset.id);
+    t.review = cb.checked; save(); renderWeek();
+  });
+  tbody.querySelectorAll('.t-edit').forEach(b => b.onclick = () => openTaskModal(b.closest('tr').dataset.id));
 
   renderSkillBars();
 }
 function renderSkillBars() {
   const counts = {};
-  db.learn.forEach(e => (e.skills || []).forEach(s => {
+  Object.values(db.weeks).forEach(w => w.tasks.forEach(t => (t.tags || []).forEach(s => {
     const k = s.trim(); if (k) counts[k] = (counts[k] || 0) + 1;
-  }));
+  })));
   const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 14);
   const max = sorted[0]?.[1] || 1;
   document.getElementById('skillBars').innerHTML = sorted.length ? sorted.map(([skill, n]) => `
@@ -236,12 +291,111 @@ function renderSkillBars() {
       <span class="sb-label">${esc(skill)}</span>
       <div class="sb-track"><div class="sb-fill" style="width:${Math.round(n / max * 100)}%"></div></div>
       <span class="sb-num">${n}</span>
-    </div>`).join('') : '<div class="empty">Adicione tags de tecnologia nos registros para ver sua evolução aqui.</div>';
+    </div>`).join('') : '<div class="empty">Adicione tags nas tarefas para acompanhar sua evolução por tecnologia.</div>';
 }
-document.getElementById('weekPrev').onclick = () => { weekRef.setDate(weekRef.getDate() - 7); renderLearn(); };
-document.getElementById('weekNext').onclick = () => { weekRef.setDate(weekRef.getDate() + 7); renderLearn(); };
-document.getElementById('weekToday').onclick = () => { weekRef = new Date(); renderLearn(); };
-document.getElementById('addLearnBtn').onclick = () => openLearnModal();
+document.getElementById('weekPrev').onclick = () => { weekRef.setDate(weekRef.getDate() - 7); renderWeek(); };
+document.getElementById('weekNext').onclick = () => { weekRef.setDate(weekRef.getDate() + 7); renderWeek(); };
+document.getElementById('weekToday').onclick = () => { weekRef = new Date(); renderWeek(); };
+document.getElementById('addTaskBtn').onclick = () => openTaskModal();
+
+/* ---- editor do documento da semana ---- */
+document.getElementById('editDocBtn').onclick = () => {
+  const wk = getWeek(weekRef);
+  modalTitle.textContent = `Documento · Semana ${weekNumber(weekRef)}`;
+  modalForm.innerHTML = `
+    <div class="field">
+      <label>Escreva em texto corrido — markdown simples (# título, ## seção, - lista, **negrito**)</label>
+      <textarea name="doc" class="doc-editor">${esc(wk.doc || DOC_TEMPLATE)}</textarea>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" data-cancel>Cancelar</button>
+      <button type="submit" class="btn-primary">Salvar documento</button>
+    </div>`;
+  wireModal(data => {
+    wk.doc = data.doc;
+    save(); toast('Documento da semana salvo'); closeModal(); renderWeek();
+  });
+};
+
+/* ---- tarefa da semana (estilo tabela de tracking) ---- */
+function openTaskModal(id) {
+  const wk = getWeek(weekRef);
+  const t = id ? wk.tasks.find(x => x.id === id) : null;
+  modalTitle.textContent = t ? 'Editar tarefa' : 'Nova tarefa da semana';
+  modalForm.innerHTML = `
+    ${field('Tarefa', 'title', 'text', t?.title || '')}
+    ${field('Notas (opcional)', 'notes', 'text', t?.notes || '')}
+    <div class="field-row">
+      ${field('Tipo', 'type', 'select', typeLabel(t?.type || 'aprendi'), TASK_TYPES.map(x => x.label))}
+      ${field('Data', 'date', 'date', t?.date || todayStr())}
+    </div>
+    <div class="field-row">
+      ${field('Tempo gasto (min)', 'timeMin', 'number', t?.timeMin || '')}
+      ${field('Link (opcional)', 'link', 'text', t?.link || '')}
+    </div>
+    ${field('Tags de tecnologia (separe por vírgula)', 'tags', 'text', (t?.tags || []).join(', '))}
+    <div class="modal-actions">
+      ${t ? '<button type="button" class="btn-del" data-del>Excluir</button>' : ''}
+      <button type="button" class="btn-ghost" data-cancel>Cancelar</button>
+      <button type="submit" class="btn-primary">${t ? 'Salvar' : 'Adicionar'}</button>
+    </div>`;
+  wireModal(data => {
+    if (!data.title.trim()) { toast('Dê um nome à tarefa'); return; }
+    const entry = {
+      title: data.title.trim(), notes: data.notes.trim(),
+      type: TASK_TYPES.find(x => x.label === data.type)?.key || 'aprendi',
+      date: data.date || todayStr(),
+      timeMin: data.timeMin ? Math.max(0, parseInt(data.timeMin, 10)) : null,
+      link: data.link.trim(),
+      tags: data.tags.split(',').map(s => s.trim()).filter(Boolean),
+    };
+    if (t) Object.assign(t, entry);
+    else wk.tasks.push({ id: uid(), review: false, ...entry });
+    save(); toast(t ? 'Tarefa atualizada' : 'Tarefa adicionada'); closeModal(); refreshAll();
+  }, t && (() => { wk.tasks = wk.tasks.filter(x => x.id !== id); save(); toast('Tarefa excluída'); refreshAll(); }));
+}
+
+/* ===========================================================
+   CÉREBRO — documento-mestre, sempre acessível
+   =========================================================== */
+const brainOverlay = document.getElementById('brainOverlay');
+const brainBody = document.getElementById('brainBody');
+const brainEditor = document.getElementById('brainEditor');
+const brainFoot = document.getElementById('brainFoot');
+
+function renderBrain() {
+  if (db.brain && db.brain.trim()) {
+    brainBody.innerHTML = md(db.brain);
+  } else {
+    brainBody.innerHTML = `<p class="doc-placeholder">O Cérebro é o seu documento-mestre: quem você é, metas, princípios, contexto dos projetos.<br/>Tudo que você (ou uma IA te ajudando) precisa saber antes de qualquer tarefa.<br/><br/>Clique em <strong>✎ Editar</strong> para começar.</p>`;
+  }
+}
+function openBrain() {
+  renderBrain();
+  brainOverlay.hidden = false;
+  brainBody.hidden = false;
+  brainEditor.hidden = true;
+  brainFoot.hidden = true;
+}
+function closeBrain() { brainOverlay.hidden = true; }
+document.getElementById('brainBtn').onclick = openBrain;
+document.getElementById('brainClose').onclick = closeBrain;
+brainOverlay.addEventListener('click', e => { if (e.target === brainOverlay) closeBrain(); });
+document.getElementById('brainEditBtn').onclick = () => {
+  brainEditor.value = db.brain || '# Cérebro\n\n## Quem eu sou\n- \n\n## Metas 2026\n- \n\n## Projetos ativos\n- \n\n## Princípios\n- ';
+  brainBody.hidden = true;
+  brainEditor.hidden = false;
+  brainFoot.hidden = false;
+  brainEditor.focus();
+};
+document.getElementById('brainSaveBtn').onclick = () => {
+  db.brain = brainEditor.value;
+  save(); toast('Cérebro atualizado');
+  renderBrain();
+  brainBody.hidden = false;
+  brainEditor.hidden = true;
+  brainFoot.hidden = true;
+};
 
 /* ===========================================================
    FINANCEIRO
@@ -272,11 +426,10 @@ function renderFin() {
       <span class="fin-ico ${f.type}">${f.type === 'in' ? '↑' : '↓'}</span>
       <span class="fin-desc">${esc(f.desc)}<small>${esc(f.cat || '')} · ${f.date.slice(8,10)}/${f.date.slice(5,7)}</small></span>
       <span class="fin-val ${f.type}">${f.type === 'in' ? '+' : '−'} ${brl(f.cents)}</span>
-      <button class="tc-mini fin-edit">Editar</button>
+      <button class="tc-mini fin-edit">✎</button>
       <button class="tc-mini fin-del">✕</button>
     </li>`).join('') : '<li class="empty">Nenhum lançamento neste mês.</li>';
 
-  // gastos por categoria
   const byCat = {};
   entries.filter(f => f.type === 'out').forEach(f => { byCat[f.cat || 'Outros'] = (byCat[f.cat || 'Outros'] || 0) + f.cents; });
   const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
@@ -313,7 +466,6 @@ document.getElementById('bbFile').onchange = e => {
     if (/OFX|<STMTTRN>/i.test(text)) txs = parseOFX(text);
     else txs = parseCSVExtrato(text);
     if (!txs.length) { toast('Nenhuma transação reconhecida no arquivo'); return; }
-    // dedup: ignora transações idênticas já importadas
     const seen = new Set(db.finance.entries.map(f => `${f.date}|${f.type}|${f.cents}|${f.desc}`));
     let added = 0;
     txs.forEach(t => {
@@ -342,7 +494,6 @@ function parseOFX(text) {
   return txs;
 }
 function parseCSVExtrato(text) {
-  // CSV do BB: colunas com data dd/mm/yyyy e valor; tolerante a variações
   const txs = [];
   text.split(/\r?\n/).forEach(line => {
     const cols = line.split(/[;,](?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c => c.replace(/^"|"$/g, '').trim());
@@ -354,7 +505,7 @@ function parseCSVExtrato(text) {
     if (isNaN(cents) || cents === 0) return;
     const [d, m, y] = dateCol.split('/');
     const desc = cols.filter(c => c && c !== dateCol && c !== valCol && !/^\d+$/.test(c)).join(' · ').slice(0, 80) || 'Transação BB';
-    if (/saldo/i.test(desc)) return; // linhas de saldo não são transações
+    if (/saldo/i.test(desc)) return;
     txs.push({ type: cents >= 0 ? 'in' : 'out', cents: Math.abs(cents), desc, cat: 'Outros', date: `${y}-${m}-${d}` });
   });
   return txs;
@@ -401,7 +552,12 @@ const modalForm = document.getElementById('modalForm');
 const modalTitle = document.getElementById('modalTitle');
 document.getElementById('modalClose').onclick = closeModal;
 overlay.onclick = e => { if (e.target === overlay) closeModal(); };
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (!overlay.hidden) closeModal();
+    else if (!brainOverlay.hidden) closeBrain();
+  }
+});
 function closeModal() { overlay.hidden = true; modalForm.innerHTML = ''; }
 
 function field(label, name, type = 'text', value = '', opts = null) {
@@ -411,7 +567,7 @@ function field(label, name, type = 'text', value = '', opts = null) {
     const options = opts.map(o => `<option ${o === value ? 'selected' : ''}>${esc(o)}</option>`).join('');
     return `<div class="field"><label>${label}</label><select name="${name}">${options}</select></div>`;
   }
-  return `<div class="field"><label>${label}</label><input type="${type}" name="${name}" value="${v}" /></div>`;
+  return `<div class="field"><label>${label}</label><input type="${type}" name="${name}" value="${v}" ${type === 'number' ? 'min="0"' : ''} /></div>`;
 }
 function wireModal(onSubmit, onDelete) {
   overlay.hidden = false;
@@ -423,36 +579,6 @@ function wireModal(onSubmit, onDelete) {
   modalForm.querySelector('[data-cancel]').onclick = closeModal;
   const del = modalForm.querySelector('[data-del]');
   if (del && onDelete) del.onclick = () => { if (confirm('Excluir definitivamente?')) { onDelete(); closeModal(); } };
-}
-
-/* ---- Registro de evolução (Trabalho) ---- */
-function openLearnModal(id, presetType) {
-  const e = id ? db.learn.find(x => x.id === id) : null;
-  modalTitle.textContent = e ? 'Editar registro' : 'Novo registro técnico';
-  const typeLabel = k => LEARN_TYPES.find(t => t.key === k)?.label;
-  modalForm.innerHTML = `
-    ${field('Tipo', 'type', 'select', typeLabel(e?.type || presetType || 'aprendi'), LEARN_TYPES.map(t => t.label))}
-    ${field('O quê', 'title', 'text', e?.title || '')}
-    ${field('Detalhes (opcional)', 'desc', 'textarea', e?.desc || '')}
-    ${field('Tecnologias/habilidades (separe por vírgula)', 'skills', 'text', (e?.skills || []).join(', '))}
-    ${field('Data', 'date', 'date', e?.date || todayStr())}
-    <div class="modal-actions">
-      ${e ? '<button type="button" class="btn-del" data-del>Excluir</button>' : ''}
-      <button type="button" class="btn-ghost" data-cancel>Cancelar</button>
-      <button type="submit" class="btn-primary">${e ? 'Salvar' : 'Registrar'}</button>
-    </div>`;
-  wireModal(data => {
-    if (!data.title.trim()) { toast('Descreva o que você aprendeu/aprimorou/criou'); return; }
-    const entry = {
-      type: LEARN_TYPES.find(t => t.label === data.type)?.key || 'aprendi',
-      title: data.title.trim(), desc: data.desc.trim(),
-      skills: data.skills.split(',').map(s => s.trim()).filter(Boolean),
-      date: data.date || todayStr(),
-    };
-    if (e) Object.assign(e, entry);
-    else db.learn.push({ id: uid(), ...entry });
-    save(); toast(e ? 'Registro atualizado' : 'Evolução registrada'); closeModal(); refreshAll();
-  }, e && (() => { db.learn = db.learn.filter(x => x.id !== id); save(); toast('Registro excluído'); refreshAll(); }));
 }
 
 /* ---- Lançamento financeiro ---- */
@@ -574,7 +700,7 @@ document.getElementById('importFile').onchange = e => {
     try {
       const data = JSON.parse(reader.result);
       if (!data.finance || !data.protocols) throw new Error();
-      db = data; save(); toast('Dados importados'); refreshAll();
+      db = data; migrate(); save(); toast('Dados importados'); refreshAll();
     } catch { toast('Arquivo inválido'); }
   };
   reader.readAsText(file);
@@ -612,6 +738,5 @@ function toast(msg) {
   const now = new Date();
   document.getElementById('todayChip').textContent =
     `${now.getDate()} de ${MONTHS[now.getMonth()]} de ${now.getFullYear()}`;
-  document.getElementById('viewSub').textContent = TITLES.hoje[1];
   renderHoje();
 })();
