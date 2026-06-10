@@ -7,7 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=3" />
+  <link rel="stylesheet" href="styles.css?v=4" />
+  <script src="https://accounts.google.com/gsi/client" async></script>
 </head>
 <body>
   <!-- ===== SIDEBAR ===== -->
@@ -73,23 +74,17 @@
         </div>
       </div>
       <div class="card schedule-card">
-        <div class="card-head">
-          <h2>Horários de hoje</h2>
-          <div style="display:flex;gap:8px;align-items:center">
-            <a class="btn-soft" href="https://calendar.google.com/calendar/u/0/r/day" target="_blank" rel="noopener">Google Cal ↗</a>
-            <button class="btn-primary" id="addBlockBtn" style="padding:7px 14px;font-size:13px">+ Compromisso</button>
+        <div class="sched-day-nav">
+          <button class="btn-icon" id="schedDayPrev" title="Dia anterior">‹</button>
+          <div class="sched-day-title" id="schedDayLabel"></div>
+          <button class="btn-icon" id="schedDayNext" title="Próximo dia">›</button>
+          <button class="btn-soft sched-today-btn" id="schedDayToday">hoje</button>
+          <div class="sched-nav-actions">
+            <button class="btn-soft" id="gcalConnectBtn">📅 Conectar GCal</button>
+            <button class="btn-primary sched-add-btn" id="addBlockBtn">+ Evento</button>
           </div>
         </div>
         <div id="scheduleTimeline"></div>
-      </div>
-
-      <div class="card">
-        <div class="card-head">
-          <h2>Agenda · Google Calendar</h2>
-        </div>
-        <iframe id="gcalFrame" class="gcal-frame" loading="lazy"
-          src="https://calendar.google.com/calendar/embed?src=pedroamaralff1%40gmail.com&ctz=America%2FSao_Paulo&mode=AGENDA&showTitle=0&showPrint=0&showTabs=0&showCalendars=0&wkst=1&hl=pt_BR"></iframe>
-        <p class="hint">Se a agenda não carregar, faça login no Google neste navegador e recarregue.</p>
       </div>
     </section>
 
@@ -256,6 +251,6 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

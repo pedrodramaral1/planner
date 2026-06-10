@@ -312,7 +312,7 @@ document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => switchView
    HOJE
    =========================================================== */
 function renderHoje() {
-  renderSchedule();
+  renderDayView();
   const wk = getWeek(new Date());
   const fin = monthEntries(new Date());
   const exp = fin.filter(f => f.type === 'out').reduce((a, f) => a + f.cents, 0);
@@ -351,12 +351,123 @@ function kpi(cls, val, label) {
 function typeLabel(k) { return TASK_TYPES.find(t => t.key === k)?.label || k; }
 
 /* ===========================================================
-   AGENDA / HORÁRIOS — time blocks + brechas livres
+   AGENDA / HORÁRIOS — Google Calendar API + local fallback
    =========================================================== */
 const toMin = t => { const [h, m] = (t || '00:00').split(':').map(Number); return h * 60 + m; };
 const toTime = m => `${String(~~(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const durFmt = m => m >= 60 ? `${~~(m / 60)}h${m % 60 ? String(m % 60).padStart(2, '0') : ''}` : `${m}min`;
 
+let scheduleViewDate = new Date();
+let gcalToken = null;
+let gcalCache  = {};    // { 'YYYY-MM-DD': [block, ...] }
+let gcalTokenClient = null;
+
+function gcalClientId() { return localStorage.getItem('planner_gcal_client_id') || ''; }
+
+function formatDayLabel(d) {
+  const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const td = todayStr();
+  const ds = localISO(d);
+  if (ds === td) return `Hoje · ${d.getDate()} ${MONTHS[d.getMonth()].slice(0,3)}`;
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  if (ds === localISO(tomorrow)) return `Amanhã · ${d.getDate()} ${MONTHS[d.getMonth()].slice(0,3)}`;
+  return `${days[d.getDay()]} · ${d.getDate()} ${MONTHS[d.getMonth()].slice(0,3)} ${d.getFullYear()}`;
+}
+
+/* ---- OAuth / GCal API ---- */
+function initGcalClient() {
+  const id = gcalClientId();
+  if (!id || !window.google?.accounts?.oauth2) return;
+  gcalTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: id,
+    scope: 'https://www.googleapis.com/auth/calendar.events',
+    callback: resp => {
+      if (resp.access_token) {
+        gcalToken = resp.access_token;
+        gcalCache  = {};
+        setGcalStatus('ok');
+        renderDayView();
+      } else {
+        setGcalStatus('err');
+      }
+    },
+  });
+}
+
+function setGcalStatus(state) {
+  const btn = document.getElementById('gcalConnectBtn');
+  if (!btn) return;
+  const map = { idle: '📅 Conectar GCal', ok: '✓ GCal conectado', err: '⚠ Reconectar GCal', busy: '⟳ …' };
+  btn.textContent = map[state] || map.idle;
+  btn.dataset.state = state;
+}
+
+async function gcalFetchDay(dateStr) {
+  if (!gcalToken) return null;
+  const tMin = encodeURIComponent(dateStr + 'T00:00:00-03:00');
+  const tMax = encodeURIComponent(dateStr + 'T23:59:59-03:00');
+  const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${tMin}&timeMax=${tMax}&singleEvents=true&orderBy=startTime&maxResults=50`;
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${gcalToken}` } });
+  if (r.status === 401) { gcalToken = null; setGcalStatus('err'); return null; }
+  if (!r.ok) return null;
+  const data = await r.json();
+  return (data.items || []).map(gcalItemToBlock).filter(b => b.start !== b.end);
+}
+
+function gcalItemToBlock(ev) {
+  const toHH = dt => (dt || '').slice(11, 16) || '00:00';
+  return {
+    id: ev.id, gcalId: ev.id, source: 'gcal',
+    title: ev.summary || '(sem título)',
+    start: toHH(ev.start?.dateTime), end: toHH(ev.end?.dateTime),
+    notes: ev.description || '',
+    type: 'external',
+  };
+}
+
+async function gcalCreateEvent(dateStr, title, start, end, notes, type) {
+  if (!gcalToken) return null;
+  const tz = 'America/Sao_Paulo';
+  const body = {
+    summary: title,
+    description: notes || '',
+    start: { dateTime: `${dateStr}T${start}:00`, timeZone: tz },
+    end:   { dateTime: `${dateStr}T${end}:00`,   timeZone: tz },
+    colorId: { work:'5', study:'1', health:'2', personal:'3', external:'8' }[type] || '8',
+  };
+  const r = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+    method: 'POST', headers: { Authorization: `Bearer ${gcalToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) return null;
+  return r.json();
+}
+
+async function gcalUpdateEvent(gcalId, dateStr, title, start, end, notes, type) {
+  if (!gcalToken || !gcalId) return null;
+  const tz = 'America/Sao_Paulo';
+  const body = {
+    summary: title,
+    description: notes || '',
+    start: { dateTime: `${dateStr}T${start}:00`, timeZone: tz },
+    end:   { dateTime: `${dateStr}T${end}:00`,   timeZone: tz },
+    colorId: { work:'5', study:'1', health:'2', personal:'3', external:'8' }[type] || '8',
+  };
+  const r = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${gcalId}`, {
+    method: 'PATCH', headers: { Authorization: `Bearer ${gcalToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return r.ok ? r.json() : null;
+}
+
+async function gcalDeleteEvent(gcalId) {
+  if (!gcalToken || !gcalId) return;
+  await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${gcalId}`, {
+    method: 'DELETE', headers: { Authorization: `Bearer ${gcalToken}` },
+  });
+}
+
+/* ---- day view ---- */
 function getDayBlocks(dateStr) {
   if (!db.agenda[dateStr]) db.agenda[dateStr] = [];
   return db.agenda[dateStr];
@@ -375,28 +486,44 @@ function calcFreeSlots(blocks, from = '06:00', to = '23:30') {
   return free;
 }
 
-function gcalLink(title, date, start, end) {
-  const fmt = (d, t) => d.replace(/-/g, '') + 'T' + t.replace(':', '') + '00';
-  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${fmt(date, start)}/${fmt(date, end)}&sf=true`;
+function gcalNewLink(date, start, end) {
+  const fmt = (d, t) => d.replace(/-/g,'') + 'T' + t.replace(':','') + '00';
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=Novo+evento&dates=${fmt(date,start)}/${fmt(date,end)}&sf=true`;
 }
 
-function renderSchedule() {
+async function renderDayView() {
   const el = document.getElementById('scheduleTimeline');
   if (!el) return;
-  const today = todayStr();
-  const blocks = getDayBlocks(today).slice().sort((a, b) => toMin(a.start) - toMin(b.start));
 
-  if (!blocks.length) {
+  const dateStr = localISO(scheduleViewDate);
+  document.getElementById('schedDayLabel').textContent = formatDayLabel(scheduleViewDate);
+
+  // Source: GCal when connected, local planner otherwise
+  let blocks;
+  if (gcalToken) {
+    if (!gcalCache[dateStr]) {
+      el.innerHTML = '<div class="sched-loading">Carregando…</div>';
+      gcalCache[dateStr] = await gcalFetchDay(dateStr) || getDayBlocks(dateStr);
+    }
+    blocks = gcalCache[dateStr];
+  } else {
+    blocks = getDayBlocks(dateStr).slice();
+  }
+
+  const sorted = [...blocks].sort((a, b) => toMin(a.start) - toMin(b.start));
+
+  if (!sorted.length) {
     el.innerHTML = `<div class="sched-empty">
-      <p class="muted">Nenhum compromisso hoje.</p>
-      <p class="muted" style="font-size:12px;margin-top:4px">Adicione seus horários fixos e o planner mostra as brechas livres automaticamente.</p>
+      <p class="muted">${gcalToken ? 'Nenhum evento no Google Calendar.' : 'Nenhum compromisso registrado.'}</p>
+      <p class="muted" style="font-size:12px;margin-top:4px">${gcalToken ? 'Adicione um evento — ele vai direto pro GCal.' : 'Conecte o GCal ou adicione eventos manualmente.'}</p>
     </div>`;
     return;
   }
 
+  // Build interleaved items (blocks + free slots)
   const items = [];
   let cur = toMin('06:00');
-  for (const b of blocks) {
+  for (const b of sorted) {
     const bs = toMin(b.start);
     if (bs > cur + 14) items.push({ isFree: true, start: toTime(cur), end: b.start, min: bs - cur });
     items.push({ ...b, isFree: false });
@@ -413,72 +540,160 @@ function renderSchedule() {
           <span class="sched-free-time">${item.start} – ${item.end}</span>
           <span class="sched-free-dur">${durFmt(item.min)}</span>
         </div>
-        <a class="btn-soft sched-gcal-link" href="${gcalLink('Compromisso', today, item.start, item.end)}" target="_blank" rel="noopener">+ usar no GCal ↗</a>
+        <a class="btn-soft sched-gcal-link" href="${gcalNewLink(dateStr, item.start, item.end)}" target="_blank" rel="noopener">+ GCal ↗</a>
       </div>`;
     }
-    const bt = BLOCK_TYPES.find(t => t.key === item.type) || BLOCK_TYPES[0];
+    const isGcal = item.source === 'gcal';
+    const bt = BLOCK_TYPES.find(t => t.key === item.type) || BLOCK_TYPES[4];
     const blockMin = toMin(item.end) - toMin(item.start);
-    return `<div class="sched-block sched-block-${item.type}">
+    return `<div class="sched-block sched-block-${item.type}" data-id="${item.id}">
       <div class="sched-block-accent sched-accent-${item.type}"></div>
       <div class="sched-block-body">
         <div class="sched-block-top">
           <strong>${esc(item.title)}</strong>
-          <span class="sched-type-chip sched-chip-${item.type}">${bt.label}</span>
+          ${isGcal ? '<span class="sched-gcal-badge">GCal</span>' : `<span class="sched-type-chip sched-chip-${item.type}">${bt.label}</span>`}
         </div>
         <span class="sched-block-time">${item.start} – ${item.end} · ${durFmt(blockMin)}</span>
         ${item.notes ? `<small class="muted">${esc(item.notes)}</small>` : ''}
       </div>
       <div class="sched-block-actions">
-        <a class="btn-soft" href="${gcalLink(item.title, today, item.start, item.end)}" target="_blank" rel="noopener" title="Abrir no Google Calendar">↗ GCal</a>
         <button class="tc-mini sched-edit" data-id="${item.id}" title="Editar">✎</button>
         <button class="tc-mini sched-del" data-id="${item.id}" title="Excluir">✕</button>
       </div>
     </div>`;
   }).join('');
 
-  el.querySelectorAll('.sched-edit').forEach(b => b.onclick = () => openBlockModal(b.dataset.id));
-  el.querySelectorAll('.sched-del').forEach(b => b.onclick = () => {
-    db.agenda[today] = getDayBlocks(today).filter(x => x.id !== b.dataset.id);
-    save(); renderSchedule();
+  el.querySelectorAll('.sched-edit').forEach(b => {
+    b.onclick = () => {
+      const block = blocks.find(x => x.id === b.dataset.id);
+      if (block) openBlockModal(block, dateStr);
+    };
+  });
+  el.querySelectorAll('.sched-del').forEach(b => {
+    b.onclick = async () => {
+      const block = blocks.find(x => x.id === b.dataset.id);
+      if (!block) return;
+      if (block.gcalId) await gcalDeleteEvent(block.gcalId);
+      else {
+        db.agenda[dateStr] = getDayBlocks(dateStr).filter(x => x.id !== block.id);
+        save();
+      }
+      gcalCache[dateStr] = null;
+      toast('Evento excluído');
+      renderDayView();
+    };
   });
 }
 
-function openBlockModal(id) {
-  const today = todayStr();
-  const block = id ? getDayBlocks(today).find(b => b.id === id) : null;
-  modalTitle.textContent = block ? 'Editar compromisso' : 'Novo compromisso';
+function openBlockModal(blockOrId, dateStr) {
+  const ds = dateStr || localISO(scheduleViewDate);
+  const block = typeof blockOrId === 'string'
+    ? getDayBlocks(ds).find(b => b.id === blockOrId)
+    : blockOrId;
+
+  modalTitle.textContent = block ? 'Editar evento' : 'Novo evento';
+  const typeVal = BLOCK_TYPES.find(t => t.key === (block?.type || 'work'))?.label || 'Trabalho';
   modalForm.innerHTML = `
     ${field('Título', 'title', 'text', block?.title || '')}
     <div class="field-row">
       ${field('Início', 'start', 'time', block?.start || '08:00')}
       ${field('Fim', 'end', 'time', block?.end || '09:00')}
     </div>
-    ${field('Tipo', 'type', 'select', BLOCK_TYPES.find(t => t.key === (block?.type || 'work'))?.label || 'Trabalho', BLOCK_TYPES.map(t => t.label))}
+    ${field('Tipo', 'type', 'select', typeVal, BLOCK_TYPES.map(t => t.label))}
     ${field('Notas (opcional)', 'notes', 'text', block?.notes || '')}
     <div class="modal-actions">
       ${block ? '<button type="button" class="btn-del" data-del>Excluir</button>' : ''}
       <button type="button" class="btn-ghost" data-cancel>Cancelar</button>
       <button type="submit" class="btn-primary">${block ? 'Salvar' : 'Adicionar'}</button>
     </div>`;
-  wireModal(data => {
+
+  wireModal(async data => {
     if (!data.title.trim()) { toast('Dê um título'); return; }
     if (!data.start || !data.end || data.start >= data.end) { toast('Horário inválido'); return; }
-    const entry = {
-      title: data.title.trim(),
-      start: data.start, end: data.end,
-      type: BLOCK_TYPES.find(t => t.label === data.type)?.key || 'work',
-      notes: data.notes.trim(),
-    };
-    const blocks = getDayBlocks(today);
-    if (block) Object.assign(block, entry);
-    else blocks.push({ id: uid(), ...entry });
-    save(); toast(block ? 'Atualizado' : 'Compromisso adicionado'); closeModal(); renderSchedule();
-  }, block && (() => {
-    db.agenda[today] = getDayBlocks(today).filter(x => x.id !== id);
-    save(); toast('Excluído'); closeModal(); renderSchedule();
+    const type = BLOCK_TYPES.find(t => t.label === data.type)?.key || 'work';
+    const entry = { title: data.title.trim(), start: data.start, end: data.end, type, notes: data.notes.trim() };
+
+    if (gcalToken) {
+      setGcalStatus('busy');
+      if (block?.gcalId) {
+        await gcalUpdateEvent(block.gcalId, ds, entry.title, entry.start, entry.end, entry.notes, type);
+        toast('Evento atualizado no GCal');
+      } else {
+        const ev = await gcalCreateEvent(ds, entry.title, entry.start, entry.end, entry.notes, type);
+        toast(ev ? 'Evento criado no GCal' : 'Salvo localmente (falha no GCal)');
+        if (!ev) { getDayBlocks(ds).push({ id: uid(), ...entry }); save(); }
+      }
+      setGcalStatus('ok');
+    } else {
+      const localBlocks = getDayBlocks(ds);
+      if (block) Object.assign(block, entry);
+      else localBlocks.push({ id: uid(), ...entry });
+      save();
+      toast(block ? 'Atualizado' : 'Evento adicionado');
+    }
+    gcalCache[ds] = null;
+    closeModal();
+    renderDayView();
+  }, block && (async () => {
+    if (block.gcalId) await gcalDeleteEvent(block.gcalId);
+    else { db.agenda[ds] = getDayBlocks(ds).filter(x => x.id !== block.id); save(); }
+    gcalCache[ds] = null;
+    toast('Excluído');
+    closeModal();
+    renderDayView();
   }));
 }
-document.getElementById('addBlockBtn').onclick = () => openBlockModal();
+
+/* ---- day navigation ---- */
+document.getElementById('schedDayPrev').onclick  = () => { scheduleViewDate.setDate(scheduleViewDate.getDate() - 1); renderDayView(); };
+document.getElementById('schedDayNext').onclick  = () => { scheduleViewDate.setDate(scheduleViewDate.getDate() + 1); renderDayView(); };
+document.getElementById('schedDayToday').onclick = () => { scheduleViewDate = new Date(); renderDayView(); };
+document.getElementById('addBlockBtn').onclick   = () => openBlockModal(null);
+
+/* ---- GCal connect button ---- */
+document.getElementById('gcalConnectBtn').onclick = () => {
+  if (!gcalClientId()) {
+    openGcalSetupModal();
+    return;
+  }
+  if (!gcalTokenClient) { initGcalClient(); }
+  if (gcalToken) { gcalToken = null; gcalCache = {}; setGcalStatus('idle'); renderDayView(); toast('GCal desconectado'); return; }
+  gcalTokenClient?.requestAccessToken();
+};
+
+function openGcalSetupModal() {
+  modalTitle.textContent = 'Conectar Google Calendar';
+  modalForm.innerHTML = `
+    ${field('Client ID do Google Cloud', 'clientId', 'text', gcalClientId())}
+    <div class="field">
+      <p class="muted" style="font-size:12px;line-height:1.6">
+        1. Acessa <strong>console.cloud.google.com</strong><br>
+        2. Cria um projeto → ativa <strong>Google Calendar API</strong><br>
+        3. Credenciais → OAuth 2.0 → Aplicativo da Web<br>
+        4. Origem autorizada: <code>https://pedrodramaral1.github.io</code><br>
+        5. Copia o Client ID e cola acima.
+      </p>
+    </div>
+    <div class="modal-actions">
+      ${gcalClientId() ? '<button type="button" class="btn-del" data-del>Remover</button>' : ''}
+      <button type="button" class="btn-ghost" data-cancel>Cancelar</button>
+      <button type="submit" class="btn-primary">Salvar e conectar</button>
+    </div>`;
+  wireModal(data => {
+    const id = data.clientId.trim();
+    if (!id) { toast('Cole o Client ID'); return; }
+    localStorage.setItem('planner_gcal_client_id', id);
+    closeModal();
+    initGcalClient();
+    setTimeout(() => gcalTokenClient?.requestAccessToken(), 100);
+  }, () => {
+    localStorage.removeItem('planner_gcal_client_id');
+    gcalToken = null; gcalTokenClient = null; gcalCache = {};
+    setGcalStatus('idle');
+    toast('Client ID removido');
+    closeModal();
+  });
+}
 
 /* ===========================================================
    TRABALHO — diário semanal
@@ -1199,6 +1414,12 @@ function toast(msg) {
   document.getElementById('todayChip').textContent =
     `${now.getDate()} de ${MONTHS[now.getMonth()]} de ${now.getFullYear()}`;
   renderHoje();
+
+  // GCal: inicializa client se houver Client ID salvo
+  // GIS script é async — tenta imediatamente e também quando o script carregar
+  initGcalClient();
+  const gsiScript = document.querySelector('script[src*="accounts.google.com"]');
+  if (gsiScript) gsiScript.addEventListener('load', () => initGcalClient());
 
   // sync: puxa do brain repo ao abrir e ao voltar para a aba
   cloudPull();

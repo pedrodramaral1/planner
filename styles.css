@@ -548,6 +548,26 @@ a { color: var(--accent-2); }
   background: linear-gradient(135deg, rgba(34,211,238,0.22), transparent 40%, transparent 60%, rgba(251,191,36,0.16));
 }
 #scheduleTimeline { display: flex; flex-direction: column; gap: 6px; }
+
+.sched-day-nav {
+  display: flex; align-items: center; gap: 8px;
+  padding-bottom: 14px; flex-wrap: wrap;
+}
+.sched-day-title {
+  font-weight: 600; font-size: 15px; flex: 1; min-width: 140px;
+}
+.sched-today-btn { font-size: 12px; padding: 3px 10px; }
+.sched-nav-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.sched-add-btn { font-size: 13px; }
+
+.sched-gcal-badge {
+  font-size: 11px; font-weight: 700; letter-spacing: .03em;
+  padding: 2px 7px; border-radius: 6px;
+  background: rgba(66,133,244,0.15); color: #4285F4;
+  border: 1px solid rgba(66,133,244,0.3);
+}
+.sched-loading { padding: 18px 0; color: var(--muted); font-size: 13px; }
+
 .sched-empty { padding: 14px 0; }
 .sched-empty .muted { display: block; }
 
