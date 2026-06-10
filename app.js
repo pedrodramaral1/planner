@@ -68,6 +68,7 @@ function blank() {
     brain: '',
     finance: { reserveCents: 400000, entries: [] }, // R$ 4.000,00 de reserva
     protocols: [],
+    updatedAt: 0,
   };
 }
 function migrate() {
@@ -101,7 +102,115 @@ function migrate() {
     }
   });
 }
-function save() { localStorage.setItem(STORE_KEY, JSON.stringify(db)); }
+function save() {
+  db.updatedAt = Date.now();
+  localStorage.setItem(STORE_KEY, JSON.stringify(db));
+  scheduleCloudPush();
+}
+
+/* ===========================================================
+   SYNC EM NUVEM — repo brain (privado) como fonte de verdade.
+   planner/data.json guarda todo o estado; cerebro.md é lido
+   e salvo direto pelo painel Cérebro. Última escrita vence.
+   =========================================================== */
+const GH_OWNER = 'pedrodramaral1';
+const GH_REPO = 'brain';
+const GH_DATA_PATH = 'planner/data.json';
+let ghSha = null;       // sha atual do data.json remoto
+let brainSha = null;    // sha atual do cerebro.md remoto
+let syncTimer = null;
+let pushing = false;
+
+function ghToken() { return localStorage.getItem('planner_gh_token') || ''; }
+function ghHeaders() {
+  return { 'Authorization': `Bearer ${ghToken()}`, 'Accept': 'application/vnd.github+json' };
+}
+// base64 unicode-safe (btoa puro quebra com acentos)
+function b64encode(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+function b64decode(b64) {
+  const bin = atob(b64.replace(/\s/g, ''));
+  return new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)));
+}
+async function ghGet(path) {
+  const r = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`, { headers: ghHeaders() });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error('GitHub ' + r.status);
+  return r.json();
+}
+async function ghPut(path, content, sha, message) {
+  const body = { message, content: b64encode(content) };
+  if (sha) body.sha = sha;
+  const r = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`, {
+    method: 'PUT', headers: ghHeaders(), body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error('GitHub ' + r.status);
+  return r.json();
+}
+
+function setSync(state) {
+  const btn = document.getElementById('syncBtn');
+  const hint = document.getElementById('syncHint');
+  if (!btn) return;
+  const map = {
+    off:  ['⇅ Ativar sync', 'Dados neste navegador.'],
+    busy: ['⟳ Sincronizando…', 'Enviando para o brain repo…'],
+    ok:   ['✓ Sincronizado', 'Em nuvem: brain repo (privado).'],
+    err:  ['⚠ Erro de sync', 'Falha ao falar com o GitHub. Confira o token.'],
+  };
+  btn.textContent = map[state][0];
+  hint.textContent = map[state][1];
+}
+
+async function cloudPull() {
+  if (!ghToken()) { setSync('off'); return; }
+  try {
+    setSync('busy');
+    const f = await ghGet(GH_DATA_PATH);
+    if (f) {
+      ghSha = f.sha;
+      const remote = JSON.parse(b64decode(f.content));
+      if ((remote.updatedAt || 0) > (db.updatedAt || 0)) {
+        db = remote;
+        migrate();
+        localStorage.setItem(STORE_KEY, JSON.stringify(db));
+        refreshAll();
+      }
+    }
+    setSync('ok');
+  } catch (e) { setSync('err'); }
+}
+
+function scheduleCloudPush() {
+  if (!ghToken()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(cloudPush, 1600);
+}
+
+async function cloudPush() {
+  if (!ghToken() || pushing) return;
+  pushing = true;
+  setSync('busy');
+  const payload = JSON.stringify(db, null, 2);
+  try {
+    const r = await ghPut(GH_DATA_PATH, payload, ghSha, `Planner ${todayStr()}`);
+    ghSha = r.content.sha;
+    setSync('ok');
+  } catch (e) {
+    // sha desatualizado (alguém salvou em outro dispositivo): repuxa o sha e tenta de novo
+    try {
+      const f = await ghGet(GH_DATA_PATH);
+      ghSha = f ? f.sha : null;
+      const r = await ghPut(GH_DATA_PATH, payload, ghSha, `Planner ${todayStr()}`);
+      ghSha = r.content.sha;
+      setSync('ok');
+    } catch { setSync('err'); }
+  } finally { pushing = false; }
+}
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function todayStr() { return localISO(new Date()); }
 function localISO(d) {
@@ -259,8 +368,22 @@ function renderWeek() {
   // documento (inline editable)
   renderWeekDoc();
 
+  // filtros por tipo
+  const counts = { aprendi: 0, aprimorei: 0, criei: 0 };
+  wk.tasks.forEach(t => { if (counts[t.type] !== undefined) counts[t.type]++; });
+  document.getElementById('typeFilters').innerHTML = TASK_TYPES.map(x => `
+    <button class="tf-chip ${taskFilter === x.key ? 'active' : ''}" data-type="${x.key}">
+      <span class="type-dot ${x.key}"></span>${counts[x.key]}
+    </button>`).join('');
+  document.querySelectorAll('.tf-chip').forEach(b => b.onclick = () => {
+    taskFilter = taskFilter === b.dataset.type ? null : b.dataset.type;
+    renderWeek();
+  });
+
   // tabela de tarefas
-  const tasks = [...wk.tasks].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const tasks = [...wk.tasks]
+    .filter(t => !taskFilter || t.type === taskFilter)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const tbody = document.getElementById('wtableBody');
   tbody.innerHTML = tasks.length ? tasks.map(t => `
     <tr data-id="${t.id}" class="type-row-${t.type}">
@@ -275,8 +398,10 @@ function renderWeek() {
     </tr>`).join('') : '<tr><td colspan="8" class="empty td-empty">—</td></tr>';
 
   const rev = wk.tasks.filter(t => t.review).length;
+  const mins = wk.tasks.reduce((a, t) => a + (t.timeMin || 0), 0);
+  const hrs = mins >= 60 ? `${Math.floor(mins / 60)}h${mins % 60 ? String(mins % 60).padStart(2, '0') : ''}` : `${mins} min`;
   document.getElementById('weekStats').textContent =
-    wk.tasks.length ? `${wk.tasks.length} tarefa(s) · ${rev} para revisar` : '';
+    wk.tasks.length ? `${wk.tasks.length} tarefa(s)${mins ? ' · ' + hrs : ''}${rev ? ' · ' + rev + ' p/ revisar' : ''}` : '';
 
   tbody.querySelectorAll('.t-review').forEach(cb => cb.onchange = () => {
     const t = wk.tasks.find(x => x.id === cb.closest('tr').dataset.id);
@@ -301,10 +426,28 @@ function renderSkillBars() {
       <span class="sb-num">${n}</span>
     </div>`).join('') : '<div class="empty">Adicione tags nas tarefas.</div>';
 }
-document.getElementById('weekPrev').onclick = () => { weekRef.setDate(weekRef.getDate() - 7); renderWeek(); };
-document.getElementById('weekNext').onclick = () => { weekRef.setDate(weekRef.getDate() + 7); renderWeek(); };
-document.getElementById('weekToday').onclick = () => { weekRef = new Date(); renderWeek(); };
+document.getElementById('weekPrev').onclick = () => { weekRef.setDate(weekRef.getDate() - 7); taskFilter = null; renderWeek(); };
+document.getElementById('weekNext').onclick = () => { weekRef.setDate(weekRef.getDate() + 7); taskFilter = null; renderWeek(); };
+document.getElementById('weekToday').onclick = () => { weekRef = new Date(); taskFilter = null; renderWeek(); };
 document.getElementById('addTaskBtn').onclick = () => openTaskModal();
+
+/* ---- registro rápido: digita + Enter, sem modal ---- */
+let taskFilter = null;
+const qaTitle = document.getElementById('qaTitle');
+const qaType = document.getElementById('qaType');
+qaTitle.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const title = qaTitle.value.trim();
+  if (!title) return;
+  getWeek(weekRef).tasks.push({
+    id: uid(), title, type: qaType.value, date: todayStr(),
+    review: false, timeMin: null, link: '', tags: [], notes: '',
+  });
+  save();
+  qaTitle.value = '';
+  renderWeek();
+  qaTitle.focus();
+});
 
 /* ---- documento inline editable ---- */
 const docBody = document.getElementById('docBody');
@@ -429,12 +572,24 @@ function renderBrain() {
     brainBody.innerHTML = `<p class="doc-placeholder">Clique em <strong>✎ Editar</strong> para começar.</p>`;
   }
 }
-function openBrain() {
+async function openBrain() {
   renderBrain();
   brainOverlay.hidden = false;
   brainBody.hidden = false;
   brainEditor.hidden = true;
   brainFoot.hidden = true;
+  // com sync ativo, o painel mostra o cerebro.md real do repo
+  if (ghToken()) {
+    try {
+      const f = await ghGet('cerebro.md');
+      if (f) {
+        brainSha = f.sha;
+        db.brain = b64decode(f.content);
+        localStorage.setItem(STORE_KEY, JSON.stringify(db));
+        renderBrain();
+      }
+    } catch {}
+  }
 }
 function closeBrain() { brainOverlay.hidden = true; }
 document.getElementById('brainBtn').onclick = openBrain;
@@ -447,14 +602,51 @@ document.getElementById('brainEditBtn').onclick = () => {
   brainFoot.hidden = false;
   brainEditor.focus();
 };
-document.getElementById('brainSaveBtn').onclick = () => {
+document.getElementById('brainSaveBtn').onclick = async () => {
   db.brain = brainEditor.value;
-  save(); toast('Cérebro atualizado');
+  save();
   renderBrain();
   brainBody.hidden = false;
   brainEditor.hidden = true;
   brainFoot.hidden = true;
+  if (ghToken()) {
+    try {
+      const r = await ghPut('cerebro.md', db.brain, brainSha, `Atualiza cerebro via planner ${todayStr()}`);
+      brainSha = r.content.sha;
+      toast('Cérebro salvo no brain repo');
+    } catch { toast('Salvo aqui; falha ao enviar pro GitHub'); }
+  } else {
+    toast('Cérebro atualizado');
+  }
 };
+
+/* ---- modal de sync ---- */
+function openSyncModal() {
+  modalTitle.textContent = 'Sync em nuvem';
+  modalForm.innerHTML = `
+    ${field('Token do GitHub', 'token', 'password', ghToken())}
+    <p class="muted">Token fine-grained com permissão <strong>Contents: read and write</strong> apenas no repo <strong>brain</strong>. Crie em github.com/settings/personal-access-tokens. Fica salvo só neste navegador.</p>
+    <p class="muted">Com o sync ativo, tudo (tarefas, financeiro, protocolos, cérebro) vive no brain repo. Editou ou excluiu aqui, atualiza em todos os dispositivos.</p>
+    <div class="modal-actions">
+      ${ghToken() ? '<button type="button" class="btn-del" data-del>Desativar</button>' : ''}
+      <button type="button" class="btn-ghost" data-cancel>Cancelar</button>
+      <button type="submit" class="btn-primary">Ativar</button>
+    </div>`;
+  wireModal(data => {
+    const t = data.token.trim();
+    if (!t) { toast('Cole o token'); return; }
+    localStorage.setItem('planner_gh_token', t);
+    closeModal();
+    toast('Sync ativado');
+    ghSha = null;
+    cloudPull().then(() => cloudPush());
+  }, ghToken() ? (() => {
+    localStorage.removeItem('planner_gh_token');
+    setSync('off');
+    toast('Sync desativado');
+  }) : null);
+}
+document.getElementById('syncBtn').onclick = openSyncModal;
 
 /* ===========================================================
    FINANCEIRO
@@ -798,4 +990,10 @@ function toast(msg) {
   document.getElementById('todayChip').textContent =
     `${now.getDate()} de ${MONTHS[now.getMonth()]} de ${now.getFullYear()}`;
   renderHoje();
+
+  // sync: puxa do brain repo ao abrir e ao voltar para a aba
+  cloudPull();
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && ghToken() && !pushing) cloudPull();
+  });
 })();

@@ -376,6 +376,41 @@ a { color: var(--accent-2); }
 .doc-placeholder { color: var(--muted); font-style: italic; }
 .doc-editor { min-height: 340px; font-family: ui-monospace, monospace; font-size: 13px; line-height: 1.6; resize: vertical; }
 
+/* registro rápido (digita + Enter) */
+.quick-add {
+  display: flex; gap: 9px; align-items: center;
+  margin-bottom: 14px;
+}
+.quick-add select {
+  width: auto; flex-shrink: 0;
+  font-size: 12.5px; padding: 8px 10px;
+  border-radius: 9px;
+}
+.quick-add input {
+  flex: 1;
+  background: var(--panel-2);
+  border: 1px dashed var(--border-strong);
+  font-size: 13.5px;
+}
+.quick-add input:focus { border-style: solid; }
+
+/* filtros por tipo (chips com contador) */
+.type-filters { display: flex; gap: 6px; margin-left: auto; }
+.tf-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 700;
+  padding: 4px 11px; border-radius: 99px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  transition: all 0.12s;
+}
+.tf-chip:hover { border-color: var(--border-strong); color: var(--text); }
+.tf-chip.active {
+  border-color: var(--border-strong);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
 /* tipo dot (tracker) */
 .type-dot {
   display: inline-block;

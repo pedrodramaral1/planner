@@ -32,11 +32,12 @@
     </button>
 
     <div class="sidebar-foot">
+      <button class="btn-ghost" id="syncBtn">⇅ Ativar sync</button>
       <button class="btn-ghost" id="themeToggle">☀ Modo claro</button>
       <button class="btn-ghost" id="exportBtn">⬇ Exportar dados</button>
       <button class="btn-ghost" id="importBtn">⬆ Importar dados</button>
       <input type="file" id="importFile" accept="application/json" hidden />
-      <p class="hint">Dados salvos neste navegador.</p>
+      <p class="hint" id="syncHint">Dados neste navegador.</p>
     </div>
   </aside>
 
@@ -104,6 +105,15 @@
         <div class="card-head">
           <h2>Tarefas</h2>
           <span class="muted" id="weekStats"></span>
+          <div class="type-filters" id="typeFilters"></div>
+        </div>
+        <div class="quick-add">
+          <select id="qaType">
+            <option value="aprendi">Aprendi</option>
+            <option value="aprimorei">Aprimorei</option>
+            <option value="criei">Criei</option>
+          </select>
+          <input type="text" id="qaTitle" placeholder="o que você fez? Enter salva" autocomplete="off" />
         </div>
         <div class="wtable-wrap">
           <table class="wtable">
