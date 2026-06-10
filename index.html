@@ -72,10 +72,20 @@
           <ul class="mini-list" id="hojeSemana"></ul>
         </div>
       </div>
+      <div class="card schedule-card">
+        <div class="card-head">
+          <h2>Horários de hoje</h2>
+          <div style="display:flex;gap:8px;align-items:center">
+            <a class="btn-soft" href="https://calendar.google.com/calendar/u/0/r/day" target="_blank" rel="noopener">Google Cal ↗</a>
+            <button class="btn-primary" id="addBlockBtn" style="padding:7px 14px;font-size:13px">+ Compromisso</button>
+          </div>
+        </div>
+        <div id="scheduleTimeline"></div>
+      </div>
+
       <div class="card">
         <div class="card-head">
-          <h2>Agenda do dia · Google Calendar</h2>
-          <a class="btn-soft" href="https://calendar.google.com/calendar/u/0/r/day" target="_blank" rel="noopener">abrir no Google ↗</a>
+          <h2>Agenda · Google Calendar</h2>
         </div>
         <iframe id="gcalFrame" class="gcal-frame" loading="lazy"
           src="https://calendar.google.com/calendar/embed?src=pedroamaralff1%40gmail.com&ctz=America%2FSao_Paulo&mode=AGENDA&showTitle=0&showPrint=0&showTabs=0&showCalendars=0&wkst=1&hl=pt_BR"></iframe>
@@ -122,7 +132,7 @@
                 <th class="col-title">Tarefa</th>
                 <th class="th-type" title="Tipo">●</th>
                 <th>Data</th>
-                <th class="td-center" title="Marcar para revisar depois">↺</th>
+                <th class="td-center" title="Revisar depois">Rev</th>
                 <th>Tempo</th>
                 <th class="td-center" title="Link">↗</th>
                 <th>Tags</th>
@@ -143,8 +153,11 @@
 
       <div class="card session-card">
         <div class="card-head">
-          <h2>Sessão</h2>
-          <button class="btn-soft" id="copySessionBtn">↗ Copiar</button>
+          <h2>Sessão · brain</h2>
+          <div style="display:flex;gap:8px">
+            <button class="btn-soft" id="genNoteBtn">⟳ Gerar</button>
+            <button class="btn-soft" id="copySessionBtn">↗ Copiar</button>
+          </div>
         </div>
         <article class="doc-body session-body" id="sessionBody" tabindex="0"></article>
         <textarea id="sessionEditor" class="doc-inline-editor" style="min-height:100px" hidden placeholder="notas para o brain..."></textarea>
@@ -157,20 +170,42 @@
         <button class="btn-icon" id="finPrev">‹</button>
         <h2 id="finMonthLabel"></h2>
         <button class="btn-icon" id="finNext">›</button>
-        <button class="btn-soft" id="reserveBtn">⚙ Reserva</button>
-        <button class="btn-soft" id="bbImportBtn">⬆ Importar extrato BB</button>
-        <input type="file" id="bbFile" accept=".ofx,.csv,.txt" hidden />
-        <button class="btn-primary" id="addFinBtn" style="margin-left:auto">+ Novo lançamento</button>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn-soft" id="reserveBtn">⚙ Reserva</button>
+          <button class="btn-soft" id="bbImportBtn">⬆ BB</button>
+          <input type="file" id="bbFile" accept=".ofx,.csv,.txt" hidden />
+          <button class="btn-primary" id="addFinBtn">+ Lançamento</button>
+        </div>
       </div>
+
+      <div class="card fin-qa-card">
+        <div class="fin-qa-row">
+          <input type="text" id="finQaDesc" placeholder="Descrição..." autocomplete="off" />
+          <input type="text" id="finQaAmount" placeholder="0,00" class="fin-qa-val" autocomplete="off" />
+          <select id="finQaType">
+            <option value="out">Gasto</option>
+            <option value="in">Receita</option>
+          </select>
+          <select id="finQaCat"></select>
+          <button class="btn-primary" id="finQaBtn">+ Lançar</button>
+        </div>
+      </div>
+
       <div class="kpis" id="finKpis"></div>
-      <div class="grid-2">
+
+      <div class="fin-main-grid">
         <div class="card">
-          <div class="card-head"><h2>Lançamentos do mês</h2></div>
+          <div class="card-head">
+            <h2>Lançamentos</h2>
+            <span class="muted" id="finMonthLabelSub"></span>
+          </div>
           <ul class="fin-list" id="finList"></ul>
         </div>
-        <div class="card">
-          <div class="card-head"><h2>Gastos por categoria</h2><span class="muted" id="catMonthLabel"></span></div>
-          <div class="skill-bars" id="catBars"></div>
+        <div class="fin-side">
+          <div class="card">
+            <div class="card-head"><h2>Por categoria</h2><span class="muted" id="catMonthLabel"></span></div>
+            <div class="skill-bars" id="catBars"></div>
+          </div>
         </div>
       </div>
     </section>

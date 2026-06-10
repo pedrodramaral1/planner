@@ -13,6 +13,13 @@ const TASK_TYPES = [
   { key: 'aprimorei', label: 'Aprimorei' },
   { key: 'criei',     label: 'Criei' },
 ];
+const BLOCK_TYPES = [
+  { key: 'work',     label: 'Trabalho',  color: 'amber'  },
+  { key: 'study',    label: 'Estudo',    color: 'blue'   },
+  { key: 'health',   label: 'Saúde',     color: 'green'  },
+  { key: 'personal', label: 'Pessoal',   color: 'accent' },
+  { key: 'external', label: 'Externo',   color: 'cyan'   },
+];
 const FIN_CATS = ['Salário', 'Extra', 'Moradia', 'Alimentação', 'Transporte', 'Saúde', 'Estudos', 'Lazer', 'Assinaturas', 'Outros'];
 const DEFAULT_PROTOCOLS = [
   { name: 'Protocolo 1 · Acordar às 06:00', desc: 'Todos os dias, sem exceção.', items: ['Acordei às 06:00'] },
@@ -68,6 +75,7 @@ function blank() {
     brain: '',
     finance: { reserveCents: 400000, entries: [] }, // R$ 4.000,00 de reserva
     protocols: [],
+    agenda: {},
     updatedAt: 0,
   };
 }
@@ -85,6 +93,7 @@ function migrate() {
     });
     delete db.learn;
   }
+  if (!db.agenda) db.agenda = {};
   Object.values(db.weeks).forEach(w => { if (w.sessionNote === undefined) w.sessionNote = ''; });
   DEFAULT_PROTOCOLS.forEach(dp => {
     if (!db.protocols.some(p => p.name === dp.name)) {
@@ -303,6 +312,7 @@ document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => switchView
    HOJE
    =========================================================== */
 function renderHoje() {
+  renderSchedule();
   const wk = getWeek(new Date());
   const fin = monthEntries(new Date());
   const exp = fin.filter(f => f.type === 'out').reduce((a, f) => a + f.cents, 0);
@@ -339,6 +349,136 @@ function kpi(cls, val, label) {
   return `<div class="kpi ${cls}"><div class="kpi-val">${val}</div><div class="kpi-label">${label}</div></div>`;
 }
 function typeLabel(k) { return TASK_TYPES.find(t => t.key === k)?.label || k; }
+
+/* ===========================================================
+   AGENDA / HORÁRIOS — time blocks + brechas livres
+   =========================================================== */
+const toMin = t => { const [h, m] = (t || '00:00').split(':').map(Number); return h * 60 + m; };
+const toTime = m => `${String(~~(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+const durFmt = m => m >= 60 ? `${~~(m / 60)}h${m % 60 ? String(m % 60).padStart(2, '0') : ''}` : `${m}min`;
+
+function getDayBlocks(dateStr) {
+  if (!db.agenda[dateStr]) db.agenda[dateStr] = [];
+  return db.agenda[dateStr];
+}
+
+function calcFreeSlots(blocks, from = '06:00', to = '23:30') {
+  const sorted = [...blocks].sort((a, b) => toMin(a.start) - toMin(b.start));
+  const free = [], end = toMin(to);
+  let cur = toMin(from);
+  for (const b of sorted) {
+    const bs = toMin(b.start), be = toMin(b.end);
+    if (bs > cur + 14) free.push({ start: toTime(cur), end: b.start, min: bs - cur });
+    cur = Math.max(cur, be);
+  }
+  if (cur + 14 < end) free.push({ start: toTime(cur), end: to, min: end - cur });
+  return free;
+}
+
+function gcalLink(title, date, start, end) {
+  const fmt = (d, t) => d.replace(/-/g, '') + 'T' + t.replace(':', '') + '00';
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${fmt(date, start)}/${fmt(date, end)}&sf=true`;
+}
+
+function renderSchedule() {
+  const el = document.getElementById('scheduleTimeline');
+  if (!el) return;
+  const today = todayStr();
+  const blocks = getDayBlocks(today).slice().sort((a, b) => toMin(a.start) - toMin(b.start));
+
+  if (!blocks.length) {
+    el.innerHTML = `<div class="sched-empty">
+      <p class="muted">Nenhum compromisso hoje.</p>
+      <p class="muted" style="font-size:12px;margin-top:4px">Adicione seus horários fixos e o planner mostra as brechas livres automaticamente.</p>
+    </div>`;
+    return;
+  }
+
+  const items = [];
+  let cur = toMin('06:00');
+  for (const b of blocks) {
+    const bs = toMin(b.start);
+    if (bs > cur + 14) items.push({ isFree: true, start: toTime(cur), end: b.start, min: bs - cur });
+    items.push({ ...b, isFree: false });
+    cur = Math.max(cur, toMin(b.end));
+  }
+  const dayEnd = toMin('23:30');
+  if (cur + 14 < dayEnd) items.push({ isFree: true, start: toTime(cur), end: '23:30', min: dayEnd - cur });
+
+  el.innerHTML = items.map(item => {
+    if (item.isFree) {
+      return `<div class="sched-free">
+        <div class="sched-free-info">
+          <span class="sched-free-label">livre</span>
+          <span class="sched-free-time">${item.start} – ${item.end}</span>
+          <span class="sched-free-dur">${durFmt(item.min)}</span>
+        </div>
+        <a class="btn-soft sched-gcal-link" href="${gcalLink('Compromisso', today, item.start, item.end)}" target="_blank" rel="noopener">+ usar no GCal ↗</a>
+      </div>`;
+    }
+    const bt = BLOCK_TYPES.find(t => t.key === item.type) || BLOCK_TYPES[0];
+    const blockMin = toMin(item.end) - toMin(item.start);
+    return `<div class="sched-block sched-block-${item.type}">
+      <div class="sched-block-accent sched-accent-${item.type}"></div>
+      <div class="sched-block-body">
+        <div class="sched-block-top">
+          <strong>${esc(item.title)}</strong>
+          <span class="sched-type-chip sched-chip-${item.type}">${bt.label}</span>
+        </div>
+        <span class="sched-block-time">${item.start} – ${item.end} · ${durFmt(blockMin)}</span>
+        ${item.notes ? `<small class="muted">${esc(item.notes)}</small>` : ''}
+      </div>
+      <div class="sched-block-actions">
+        <a class="btn-soft" href="${gcalLink(item.title, today, item.start, item.end)}" target="_blank" rel="noopener" title="Abrir no Google Calendar">↗ GCal</a>
+        <button class="tc-mini sched-edit" data-id="${item.id}" title="Editar">✎</button>
+        <button class="tc-mini sched-del" data-id="${item.id}" title="Excluir">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.sched-edit').forEach(b => b.onclick = () => openBlockModal(b.dataset.id));
+  el.querySelectorAll('.sched-del').forEach(b => b.onclick = () => {
+    db.agenda[today] = getDayBlocks(today).filter(x => x.id !== b.dataset.id);
+    save(); renderSchedule();
+  });
+}
+
+function openBlockModal(id) {
+  const today = todayStr();
+  const block = id ? getDayBlocks(today).find(b => b.id === id) : null;
+  modalTitle.textContent = block ? 'Editar compromisso' : 'Novo compromisso';
+  modalForm.innerHTML = `
+    ${field('Título', 'title', 'text', block?.title || '')}
+    <div class="field-row">
+      ${field('Início', 'start', 'time', block?.start || '08:00')}
+      ${field('Fim', 'end', 'time', block?.end || '09:00')}
+    </div>
+    ${field('Tipo', 'type', 'select', BLOCK_TYPES.find(t => t.key === (block?.type || 'work'))?.label || 'Trabalho', BLOCK_TYPES.map(t => t.label))}
+    ${field('Notas (opcional)', 'notes', 'text', block?.notes || '')}
+    <div class="modal-actions">
+      ${block ? '<button type="button" class="btn-del" data-del>Excluir</button>' : ''}
+      <button type="button" class="btn-ghost" data-cancel>Cancelar</button>
+      <button type="submit" class="btn-primary">${block ? 'Salvar' : 'Adicionar'}</button>
+    </div>`;
+  wireModal(data => {
+    if (!data.title.trim()) { toast('Dê um título'); return; }
+    if (!data.start || !data.end || data.start >= data.end) { toast('Horário inválido'); return; }
+    const entry = {
+      title: data.title.trim(),
+      start: data.start, end: data.end,
+      type: BLOCK_TYPES.find(t => t.label === data.type)?.key || 'work',
+      notes: data.notes.trim(),
+    };
+    const blocks = getDayBlocks(today);
+    if (block) Object.assign(block, entry);
+    else blocks.push({ id: uid(), ...entry });
+    save(); toast(block ? 'Atualizado' : 'Compromisso adicionado'); closeModal(); renderSchedule();
+  }, block && (() => {
+    db.agenda[today] = getDayBlocks(today).filter(x => x.id !== id);
+    save(); toast('Excluído'); closeModal(); renderSchedule();
+  }));
+}
+document.getElementById('addBlockBtn').onclick = () => openBlockModal();
 
 /* ===========================================================
    TRABALHO — diário semanal
@@ -519,6 +659,26 @@ document.getElementById('copySessionBtn').onclick = () => {
   navigator.clipboard.writeText(wk.sessionNote).then(() => toast('Notas copiadas'));
 };
 
+document.getElementById('genNoteBtn').onclick = () => {
+  const wk = getWeek(weekRef);
+  if (!wk.tasks.length) { toast('Sem tarefas nesta semana'); return; }
+  const byType = { aprendi: [], aprimorei: [], criei: [] };
+  wk.tasks.forEach(t => { if (byType[t.type]) byType[t.type].push(t.title); });
+  const range = document.getElementById('weekRangeLabel').textContent;
+  let note = `## Semana ${weekNumber(weekRef)} · ${range}\n\n`;
+  if (byType.aprendi.length)   note += `**Aprendi:** ${byType.aprendi.join(', ')}\n`;
+  if (byType.aprimorei.length) note += `**Aprimorei:** ${byType.aprimorei.join(', ')}\n`;
+  if (byType.criei.length)     note += `**Criei:** ${byType.criei.join(', ')}\n`;
+  const revTasks = wk.tasks.filter(t => t.review);
+  if (revTasks.length) note += `\n**Para revisar:** ${revTasks.map(t => t.title).join(', ')}\n`;
+  wk.sessionNote = note.trim();
+  save();
+  renderWeekSession();
+  sessionBody.hidden = false;
+  sessionEditor.hidden = true;
+  toast('Resumo gerado — edite e copie para o brain');
+};
+
 /* ---- tarefa da semana (estilo tabela de tracking) ---- */
 function openTaskModal(id) {
   const wk = getWeek(weekRef);
@@ -657,29 +817,53 @@ function monthEntries(date) {
 }
 function renderFin() {
   const y = finDate.getFullYear(), m = finDate.getMonth();
-  document.getElementById('finMonthLabel').textContent = `${MONTHS[m]} ${y}`;
-  document.getElementById('catMonthLabel').textContent = `${MONTHS[m]} ${y}`;
+  const monthLabel = `${MONTHS[m]} ${y}`;
+  document.getElementById('finMonthLabel').textContent = monthLabel;
+  document.getElementById('finMonthLabelSub').textContent = monthLabel;
+  document.getElementById('catMonthLabel').textContent = monthLabel;
+
   const entries = monthEntries(finDate).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const inc = entries.filter(f => f.type === 'in').reduce((a, f) => a + f.cents, 0);
   const exp = entries.filter(f => f.type === 'out').reduce((a, f) => a + f.cents, 0);
   const totalCents = db.finance.reserveCents + db.finance.entries.reduce((a, f) => a + (f.type === 'in' ? f.cents : -f.cents), 0);
+  const result = inc - exp;
 
   document.getElementById('finKpis').innerHTML = `
-    ${kpi(totalCents >= 0 ? 'green' : 'red', brl(totalCents), 'Patrimônio total')}
-    ${kpi('', brl(db.finance.reserveCents), 'Reserva')}
-    ${kpi('green', brl(inc), 'Receitas no mês')}
-    ${kpi('red', brl(exp), 'Gastos no mês')}
-    ${kpi(inc - exp >= 0 ? 'blue' : 'red', brl(inc - exp), 'Resultado do mês')}
+    ${kpi(totalCents >= 0 ? 'green' : 'red', brl(totalCents), 'Patrimônio')}
+    ${kpi('green', brl(inc), 'Entradas')}
+    ${kpi('red', brl(exp), 'Saídas')}
+    ${kpi(result >= 0 ? 'blue' : 'red', brl(result), 'Resultado')}
   `;
 
-  document.getElementById('finList').innerHTML = entries.length ? entries.map(f => `
-    <li data-id="${f.id}">
-      <span class="fin-ico ${f.type}">${f.type === 'in' ? '↑' : '↓'}</span>
-      <span class="fin-desc">${esc(f.desc)}<small>${esc(f.cat || '')} · ${f.date.slice(8,10)}/${f.date.slice(5,7)}</small></span>
-      <span class="fin-val ${f.type}">${f.type === 'in' ? '+' : '−'} ${brl(f.cents)}</span>
-      <button class="tc-mini fin-edit">✎</button>
-      <button class="tc-mini fin-del">✕</button>
-    </li>`).join('') : '<li class="empty">Nenhum lançamento neste mês.</li>';
+  // Agrupa por data com cabeçalho de dia
+  if (entries.length) {
+    const grouped = {};
+    entries.forEach(f => { const d = f.date || todayStr(); (grouped[d] = grouped[d] || []).push(f); });
+    const days = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+    let html = '';
+    days.forEach(dk => {
+      const dayEntries = grouped[dk];
+      const dayResult = dayEntries.reduce((a, f) => a + (f.type === 'in' ? f.cents : -f.cents), 0);
+      html += `<li class="fin-date-header">
+        <span>${dk.slice(8, 10)}/${dk.slice(5, 7)}</span>
+        <span class="fin-day-total ${dayResult >= 0 ? 'in' : 'out'}">${dayResult >= 0 ? '+' : '−'} ${brl(Math.abs(dayResult))}</span>
+      </li>`;
+      dayEntries.forEach(f => {
+        html += `<li data-id="${f.id}" class="fin-item">
+          <span class="fin-ico ${f.type}">${f.type === 'in' ? '↑' : '↓'}</span>
+          <span class="fin-desc">${esc(f.desc)}<small>${esc(f.cat || '')}</small></span>
+          <span class="fin-val ${f.type}">${f.type === 'in' ? '+' : '−'} ${brl(f.cents)}</span>
+          <div class="fin-item-btns">
+            <button class="tc-mini fin-edit" title="Editar">✎</button>
+            <button class="tc-mini fin-del" title="Excluir">✕</button>
+          </div>
+        </li>`;
+      });
+    });
+    document.getElementById('finList').innerHTML = html;
+  } else {
+    document.getElementById('finList').innerHTML = '<li class="empty">Nenhum lançamento neste mês.</li>';
+  }
 
   const byCat = {};
   entries.filter(f => f.type === 'out').forEach(f => { byCat[f.cat || 'Outros'] = (byCat[f.cat || 'Outros'] || 0) + f.cents; });
@@ -705,6 +889,31 @@ document.getElementById('finPrev').onclick = () => { finDate.setMonth(finDate.ge
 document.getElementById('finNext').onclick = () => { finDate.setMonth(finDate.getMonth() + 1); renderFin(); };
 document.getElementById('addFinBtn').onclick = () => openFinModal();
 document.getElementById('reserveBtn').onclick = openReserveModal;
+
+/* ---- Finance quick-add (setup único) ---- */
+(function setupFinQa() {
+  const descEl   = document.getElementById('finQaDesc');
+  const amtEl    = document.getElementById('finQaAmount');
+  const typeEl   = document.getElementById('finQaType');
+  const catEl    = document.getElementById('finQaCat');
+  const btn      = document.getElementById('finQaBtn');
+  catEl.innerHTML = FIN_CATS.map(c => `<option>${c}</option>`).join('');
+  function commit() {
+    const desc = descEl.value.trim();
+    if (!desc) { toast('Descreva o lançamento'); descEl.focus(); return; }
+    const cents = parseCents(amtEl.value);
+    if (isNaN(cents) || cents <= 0) { toast('Valor inválido — ex: 45,90'); amtEl.focus(); return; }
+    db.finance.entries.push({ id: uid(), desc, type: typeEl.value, cents, cat: catEl.value, date: todayStr() });
+    save();
+    descEl.value = ''; amtEl.value = '';
+    toast('Lançado');
+    renderFin();
+    descEl.focus();
+  }
+  btn.onclick = commit;
+  amtEl.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); });
+  descEl.addEventListener('keydown', e => { if (e.key === 'Enter') amtEl.focus(); });
+})();
 
 /* ---- Importação de extrato do Banco do Brasil (OFX / CSV) ---- */
 document.getElementById('bbImportBtn').onclick = () => document.getElementById('bbFile').click();
