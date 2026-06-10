@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Planner · Pedro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=1" />
+</head>
+<body>
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">P</div>
+      <div class="brand-text">
+        <strong>Planner</strong>
+        <span>pessoal</span>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item active" data-view="hoje"><span class="nv-ico">◈</span> Hoje</button>
+      <button class="nav-item" data-view="trabalho"><span class="nv-ico">▣</span> Trabalho</button>
+      <button class="nav-item" data-view="estudos"><span class="nv-ico">✎</span> Estudos</button>
+      <button class="nav-item" data-view="financeiro"><span class="nv-ico">$</span> Financeiro</button>
+      <button class="nav-item" data-view="protocolos"><span class="nv-ico">☰</span> Protocolos</button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <button class="btn-ghost" id="themeToggle">☀ Modo claro</button>
+      <button class="btn-ghost" id="exportBtn">⬇ Exportar dados</button>
+      <button class="btn-ghost" id="importBtn">⬆ Importar dados</button>
+      <input type="file" id="importFile" accept="application/json" hidden />
+      <p class="hint">Dados salvos neste navegador.</p>
+    </div>
+  </aside>
+
+  <!-- ===== MAIN ===== -->
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <h1 id="viewTitle">Hoje</h1>
+        <p class="subtitle" id="viewSub"></p>
+      </div>
+      <div class="topbar-actions">
+        <span class="today-chip" id="todayChip"></span>
+      </div>
+    </header>
+
+    <!-- VIEW: HOJE -->
+    <section class="view active" id="view-hoje">
+      <div class="kpis" id="hojeKpis"></div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>Tarefas pendentes</h2><button class="btn-soft" data-go="trabalho">ver tudo →</button></div>
+          <ul class="mini-list" id="hojeTarefas"></ul>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Estudo desta semana</h2><button class="btn-soft" data-go="estudos">ver tudo →</button></div>
+          <div class="progress-wrap">
+            <div class="progress-bar"><div class="progress-fill" id="hojeStudyFill"></div></div>
+            <span id="hojeStudyLabel" class="muted"></span>
+          </div>
+          <ul class="mini-list" id="hojeEstudos"></ul>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h2>Mês financeiro</h2><button class="btn-soft" data-go="financeiro">ver tudo →</button></div>
+          <div class="fin-mini" id="hojeFin"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Protocolos</h2><button class="btn-soft" data-go="protocolos">ver tudo →</button></div>
+          <ul class="mini-list" id="hojeProtocolos"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW: TRABALHO -->
+    <section class="view" id="view-trabalho">
+      <div class="board-filters">
+        <input type="search" id="workSearch" placeholder="Buscar tarefa..." />
+        <button class="btn-primary" id="addWorkBtn">+ Nova tarefa</button>
+      </div>
+      <div class="board" id="workBoard"></div>
+    </section>
+
+    <!-- VIEW: ESTUDOS -->
+    <section class="view" id="view-estudos">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head">
+            <h2>Meta semanal</h2>
+            <button class="btn-soft" id="editGoalBtn">⚙ Ajustar meta</button>
+          </div>
+          <div class="progress-wrap">
+            <div class="progress-bar"><div class="progress-fill" id="studyFill"></div></div>
+            <span id="studyLabel" class="muted"></span>
+          </div>
+          <div id="studyBySubject" class="status-break"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Registrar sessão</h2></div>
+          <form id="studyQuickForm" class="quick-form">
+            <input type="text" name="subject" placeholder="Matéria / tópico" required />
+            <div class="field-row">
+              <input type="number" name="minutes" placeholder="Minutos" min="1" required />
+              <input type="date" name="date" required />
+            </div>
+            <input type="text" name="notes" placeholder="Notas (opcional)" />
+            <button type="submit" class="btn-primary">+ Registrar</button>
+          </form>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Histórico de sessões</h2></div>
+        <ul class="session-list" id="sessionList"></ul>
+      </div>
+    </section>
+
+    <!-- VIEW: FINANCEIRO -->
+    <section class="view" id="view-financeiro">
+      <div class="fin-toolbar">
+        <button class="btn-icon" id="finPrev">‹</button>
+        <h2 id="finMonthLabel"></h2>
+        <button class="btn-icon" id="finNext">›</button>
+        <button class="btn-primary" id="addFinBtn" style="margin-left:auto">+ Novo lançamento</button>
+      </div>
+      <div class="kpis" id="finKpis"></div>
+      <div class="card">
+        <div class="card-head"><h2>Lançamentos do mês</h2></div>
+        <ul class="fin-list" id="finList"></ul>
+      </div>
+    </section>
+
+    <!-- VIEW: PROTOCOLOS -->
+    <section class="view" id="view-protocolos">
+      <div class="view-head">
+        <p class="muted">Checklists reutilizáveis para rotinas que se repetem.</p>
+        <button class="btn-primary" id="addProtoBtn">+ Novo protocolo</button>
+      </div>
+      <div class="cards-grid" id="protoGrid"></div>
+    </section>
+  </main>
+
+  <!-- ===== MODAL ===== -->
+  <div class="modal-overlay" id="modalOverlay" hidden>
+    <div class="modal" id="modal">
+      <div class="modal-head">
+        <h3 id="modalTitle"></h3>
+        <button class="btn-icon" id="modalClose">✕</button>
+      </div>
+      <form id="modalForm" class="modal-body"></form>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="app.js?v=1"></script>
+</body>
+</html>
