@@ -306,6 +306,16 @@ a { color: var(--accent-2); }
 .week-title h2 { font-family: var(--font-display); font-size: 21px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.1; }
 .week-title .muted { font-size: 12px; }
 
+/* botão ícone acento (toolbar) */
+.btn-icon-accent {
+  background: linear-gradient(120deg, var(--accent), #6e5cf0);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(139, 124, 255, 0.35);
+  font-size: 20px; font-weight: 700; line-height: 1;
+}
+.btn-icon-accent:hover { box-shadow: 0 6px 20px rgba(139, 124, 255, 0.5); transform: translateY(-1px); }
+
 /* documento da semana — estilo editorial */
 .doc-card::before {
   background: linear-gradient(135deg, rgba(251, 191, 36, 0.35), transparent 40%, transparent 60%, rgba(139, 124, 255, 0.25));
@@ -314,7 +324,26 @@ a { color: var(--accent-2); }
   font-size: 14.5px;
   line-height: 1.75;
   max-width: 760px;
+  cursor: text;
+  min-height: 52px;
 }
+.doc-inline-editor {
+  width: 100%;
+  min-height: 210px;
+  font-family: ui-monospace, monospace;
+  font-size: 13.5px;
+  line-height: 1.72;
+  resize: vertical;
+  background: transparent;
+  border: none;
+  border-top: 1px dashed var(--border-strong);
+  border-radius: 0 0 var(--radius) var(--radius);
+  padding: 14px 2px;
+  outline: none;
+  box-shadow: none;
+  color: var(--text);
+}
+.doc-inline-editor:focus { border-top-color: var(--accent); box-shadow: none; }
 .doc-body h2 {
   font-family: var(--font-serif); font-style: italic;
   font-size: 26px; font-weight: 600;
@@ -348,9 +377,20 @@ a { color: var(--accent-2); }
 .doc-placeholder { color: var(--muted); font-style: italic; }
 .doc-editor { min-height: 340px; font-family: ui-monospace, monospace; font-size: 13px; line-height: 1.6; resize: vertical; }
 
+/* tipo dot (tracker) */
+.type-dot {
+  display: inline-block;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.type-dot.aprendi  { background: var(--accent-2); box-shadow: 0 0 8px rgba(34,211,238,0.55); }
+.type-dot.aprimorei { background: var(--amber);    box-shadow: 0 0 8px rgba(251,191,36,0.55); }
+.type-dot.criei     { background: var(--green);    box-shadow: 0 0 8px rgba(52,211,153,0.55); }
+
 /* tabela de tarefas — estilo tracker */
 .wtable-wrap { overflow-x: auto; margin: 0 -6px; }
-.wtable { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 720px; }
+.wtable { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 640px; }
 .wtable th {
   text-align: left; font-size: 11px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.8px;
@@ -365,11 +405,18 @@ a { color: var(--accent-2); }
 }
 .wtable tbody tr { transition: background 0.12s; }
 .wtable tbody tr:hover { background: var(--panel-2); }
-.wtable .col-title { width: 34%; }
+.wtable .col-title { width: 36%; }
 .wtable .col-title strong { font-weight: 600; display: block; }
 .wtable .col-title small { color: var(--muted); font-size: 12px; }
+.th-type { width: 32px; text-align: center; font-size: 9px; opacity: 0.45; }
 .td-center { text-align: center; }
 .td-date { white-space: nowrap; color: var(--muted); font-size: 12.5px; }
+.td-empty { text-align: center; letter-spacing: 2px; opacity: 0.3; padding: 22px 0; }
+
+/* borda esquerda colorida por tipo de tarefa */
+.wtable tbody tr.type-row-aprendi   > td:first-child { border-left: 3px solid var(--accent-2); }
+.wtable tbody tr.type-row-aprimorei > td:first-child { border-left: 3px solid var(--amber); }
+.wtable tbody tr.type-row-criei     > td:first-child { border-left: 3px solid var(--green); }
 .t-review { width: 16px; height: 16px; accent-color: var(--red); cursor: pointer; }
 .t-link { font-size: 15px; text-decoration: none; }
 .skill-tag {

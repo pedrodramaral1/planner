@@ -95,21 +95,18 @@
           <span class="muted" id="weekRangeLabel"></span>
         </div>
         <button class="btn-icon" id="weekNext">›</button>
-        <button class="btn-ghost" id="weekToday">Semana atual</button>
-        <button class="btn-primary" id="addTaskBtn" style="margin-left:auto">+ Nova tarefa</button>
+        <button class="btn-icon" id="weekToday" title="Semana atual">⊙</button>
+        <button class="btn-icon btn-icon-accent" id="addTaskBtn" style="margin-left:auto" title="Nova tarefa">+</button>
       </div>
 
       <div class="card doc-card">
-        <div class="card-head">
-          <h2>Documento da semana</h2>
-          <button class="btn-soft" id="editDocBtn">✎ Escrever</button>
-        </div>
-        <article class="doc-body" id="docBody"></article>
+        <article class="doc-body" id="docBody" tabindex="0"></article>
+        <textarea id="docInlineEditor" class="doc-inline-editor" hidden></textarea>
       </div>
 
-      <div class="card">
+      <div class="card notepad-card">
         <div class="card-head">
-          <h2>Tarefas da semana</h2>
+          <h2>Tarefas</h2>
           <span class="muted" id="weekStats"></span>
         </div>
         <div class="wtable-wrap">
@@ -117,11 +114,11 @@
             <thead>
               <tr>
                 <th class="col-title">Tarefa</th>
-                <th>Tipo</th>
+                <th class="th-type" title="Tipo">●</th>
                 <th>Data</th>
-                <th title="Marcar para revisar depois">Revisar</th>
+                <th class="td-center" title="Marcar para revisar depois">↺</th>
                 <th>Tempo</th>
-                <th>Link</th>
+                <th class="td-center" title="Link">↗</th>
                 <th>Tags</th>
                 <th></th>
               </tr>
@@ -134,7 +131,6 @@
       <div class="card">
         <div class="card-head">
           <h2>Radar técnico</h2>
-          <span class="muted">acumulado de todas as semanas, por tecnologia</span>
         </div>
         <div class="skill-bars" id="skillBars"></div>
       </div>

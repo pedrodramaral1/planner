@@ -234,6 +234,13 @@ function typeLabel(k) { return TASK_TYPES.find(t => t.key === k)?.label || k; }
    TRABALHO — diário semanal
    =========================================================== */
 function renderWeek() {
+  // se editor inline estiver aberto, salva antes de mudar
+  if (docEditor && !docEditor.hidden) {
+    getWeek(weekRef).doc = docEditor.value;
+    save();
+    docEditor.hidden = true;
+    docBody.hidden = false;
+  }
   const start = weekStart(weekRef);
   const end = new Date(start); end.setDate(start.getDate() + 6);
   const wk = getWeek(weekRef);
@@ -242,30 +249,23 @@ function renderWeek() {
   document.getElementById('weekRangeLabel').textContent =
     `${start.getDate()} ${MONTHS[start.getMonth()].slice(0,3).toLowerCase()} – ${end.getDate()} ${MONTHS[end.getMonth()].slice(0,3).toLowerCase()} ${end.getFullYear()}`;
 
-  // documento
-  const body = document.getElementById('docBody');
-  if (wk.doc && wk.doc.trim()) {
-    body.innerHTML = md(wk.doc);
-    body.classList.remove('doc-empty');
-  } else {
-    body.innerHTML = `<p class="doc-placeholder">Esta semana ainda não foi escrita.<br/>Clique em <strong>✎ Escrever</strong> e registre em texto corrido o que você aprendeu, aprimorou e criou — como um diário de bordo.</p>`;
-    body.classList.add('doc-empty');
-  }
+  // documento (inline editable)
+  renderWeekDoc();
 
   // tabela de tarefas
   const tasks = [...wk.tasks].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const tbody = document.getElementById('wtableBody');
   tbody.innerHTML = tasks.length ? tasks.map(t => `
-    <tr data-id="${t.id}">
+    <tr data-id="${t.id}" class="type-row-${t.type}">
       <td class="col-title"><strong>${esc(t.title)}</strong>${t.notes ? `<small>${esc(t.notes)}</small>` : ''}</td>
-      <td><span class="badge-type ${t.type}">${typeLabel(t.type)}</span></td>
+      <td class="td-center"><span class="type-dot ${t.type}" title="${typeLabel(t.type)}"></span></td>
       <td class="td-date">${t.date ? `${t.date.slice(8,10)}/${t.date.slice(5,7)}` : '—'}</td>
       <td class="td-center"><input type="checkbox" class="t-review" ${t.review ? 'checked' : ''} /></td>
       <td class="td-date">${t.timeMin ? t.timeMin + ' min' : '—'}</td>
       <td class="td-center">${t.link ? `<a class="t-link" href="${esc(t.link)}" target="_blank" rel="noopener">↗</a>` : '—'}</td>
       <td>${(t.tags || []).map(s => `<span class="skill-tag">${esc(s)}</span>`).join(' ')}</td>
-      <td class="td-center"><button class="tc-mini t-edit">✎</button></td>
-    </tr>`).join('') : '<tr><td colspan="8" class="empty">Nenhuma tarefa nesta semana.</td></tr>';
+      <td class="td-center"><button class="tc-mini t-edit" title="Editar">✎</button></td>
+    </tr>`).join('') : '<tr><td colspan="8" class="empty td-empty">—</td></tr>';
 
   const rev = wk.tasks.filter(t => t.review).length;
   document.getElementById('weekStats').textContent =
@@ -291,31 +291,44 @@ function renderSkillBars() {
       <span class="sb-label">${esc(skill)}</span>
       <div class="sb-track"><div class="sb-fill" style="width:${Math.round(n / max * 100)}%"></div></div>
       <span class="sb-num">${n}</span>
-    </div>`).join('') : '<div class="empty">Adicione tags nas tarefas para acompanhar sua evolução por tecnologia.</div>';
+    </div>`).join('') : '<div class="empty">Adicione tags nas tarefas.</div>';
 }
 document.getElementById('weekPrev').onclick = () => { weekRef.setDate(weekRef.getDate() - 7); renderWeek(); };
 document.getElementById('weekNext').onclick = () => { weekRef.setDate(weekRef.getDate() + 7); renderWeek(); };
 document.getElementById('weekToday').onclick = () => { weekRef = new Date(); renderWeek(); };
 document.getElementById('addTaskBtn').onclick = () => openTaskModal();
 
-/* ---- editor do documento da semana ---- */
-document.getElementById('editDocBtn').onclick = () => {
+/* ---- documento inline editable ---- */
+const docBody = document.getElementById('docBody');
+const docEditor = document.getElementById('docInlineEditor');
+
+function renderWeekDoc() {
   const wk = getWeek(weekRef);
-  modalTitle.textContent = `Documento · Semana ${weekNumber(weekRef)}`;
-  modalForm.innerHTML = `
-    <div class="field">
-      <label>Escreva em texto corrido — markdown simples (# título, ## seção, - lista, **negrito**)</label>
-      <textarea name="doc" class="doc-editor">${esc(wk.doc || DOC_TEMPLATE)}</textarea>
-    </div>
-    <div class="modal-actions">
-      <button type="button" class="btn-ghost" data-cancel>Cancelar</button>
-      <button type="submit" class="btn-primary">Salvar documento</button>
-    </div>`;
-  wireModal(data => {
-    wk.doc = data.doc;
-    save(); toast('Documento da semana salvo'); closeModal(); renderWeek();
-  });
-};
+  if (wk.doc && wk.doc.trim()) {
+    docBody.innerHTML = md(wk.doc);
+    docBody.classList.remove('doc-empty');
+  } else {
+    docBody.innerHTML = `<p class="doc-placeholder">clique para escrever&hellip;</p>`;
+    docBody.classList.add('doc-empty');
+  }
+}
+
+docBody.addEventListener('click', () => {
+  const wk = getWeek(weekRef);
+  docEditor.value = wk.doc || DOC_TEMPLATE;
+  docBody.hidden = true;
+  docEditor.hidden = false;
+  docEditor.focus();
+});
+
+docEditor.addEventListener('blur', () => {
+  const wk = getWeek(weekRef);
+  wk.doc = docEditor.value;
+  save();
+  docEditor.hidden = true;
+  docBody.hidden = false;
+  renderWeekDoc();
+});
 
 /* ---- tarefa da semana (estilo tabela de tracking) ---- */
 function openTaskModal(id) {
