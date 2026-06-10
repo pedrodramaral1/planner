@@ -135,7 +135,7 @@ a { color: var(--accent-2); }
 .brain-btn {
   margin-top: 18px;
   display: flex; align-items: center; gap: 11px;
-  padding: 13px;
+  padding: 11px 13px;
   border-radius: 14px;
   border: 1px dashed var(--border-strong);
   background: linear-gradient(135deg, rgba(251, 191, 36, 0.07), rgba(139, 124, 255, 0.07));
@@ -143,9 +143,8 @@ a { color: var(--accent-2); }
   transition: all 0.15s;
 }
 .brain-btn:hover { border-style: solid; border-color: var(--amber); box-shadow: 0 0 22px rgba(251, 191, 36, 0.18); }
-.brain-ico { font-size: 21px; }
-.brain-btn strong { display: block; font-family: var(--font-display); font-size: 14px; }
-.brain-btn small { color: var(--muted); font-size: 11px; }
+.brain-ico { font-size: 20px; }
+.brain-btn strong { font-family: var(--font-display); font-size: 14px; }
 
 .sidebar-foot { margin-top: auto; display: flex; flex-direction: column; gap: 5px; }
 .btn-ghost {
@@ -508,6 +507,12 @@ a { color: var(--accent-2); }
 .proto-items input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--green); cursor: pointer; flex-shrink: 0; }
 .proto-foot { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 8px; }
 .proto-prog { font-size: 12px; color: var(--muted); flex: 1; }
+
+/* sessão (integração brain) */
+.session-card::before {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.18), transparent 38%, transparent 62%, rgba(139, 124, 255, 0.12));
+}
+.session-body { min-height: 36px; }
 
 /* ===== cérebro overlay ===== */
 .brain-overlay {

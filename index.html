@@ -16,7 +16,6 @@
       <div class="brand-mark">P</div>
       <div class="brand-text">
         <strong>Planner</strong>
-        <span>sistema pessoal</span>
       </div>
     </div>
 
@@ -29,10 +28,7 @@
 
     <button class="brain-btn" id="brainBtn">
       <span class="brain-ico">🧠</span>
-      <span>
-        <strong>Cérebro</strong>
-        <small>contexto geral, sempre à mão</small>
-      </span>
+      <strong>Cérebro</strong>
     </button>
 
     <div class="sidebar-foot">
@@ -134,6 +130,15 @@
         </div>
         <div class="skill-bars" id="skillBars"></div>
       </div>
+
+      <div class="card session-card">
+        <div class="card-head">
+          <h2>Sessão</h2>
+          <button class="btn-soft" id="copySessionBtn">↗ Copiar</button>
+        </div>
+        <article class="doc-body session-body" id="sessionBody" tabindex="0"></article>
+        <textarea id="sessionEditor" class="doc-inline-editor" style="min-height:100px" hidden placeholder="notas para o brain..."></textarea>
+      </div>
     </section>
 
     <!-- VIEW: FINANCEIRO -->
@@ -163,7 +168,7 @@
     <!-- VIEW: PROTOCOLOS -->
     <section class="view" id="view-protocolos">
       <div class="view-head">
-        <p class="muted">Protocolos diários — reiniciam automaticamente a cada novo dia.</p>
+        <p class="muted">Reiniciam a cada dia.</p>
         <button class="btn-primary" id="addProtoBtn">+ Novo protocolo</button>
       </div>
       <div class="cards-grid" id="protoGrid"></div>

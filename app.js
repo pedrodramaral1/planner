@@ -84,6 +84,7 @@ function migrate() {
     });
     delete db.learn;
   }
+  Object.values(db.weeks).forEach(w => { if (w.sessionNote === undefined) w.sessionNote = ''; });
   DEFAULT_PROTOCOLS.forEach(dp => {
     if (!db.protocols.some(p => p.name === dp.name)) {
       db.protocols.push({
@@ -117,7 +118,7 @@ function weekStart(d) {
 function weekKey(d) { return localISO(weekStart(d)); }
 function getWeek(d) {
   const k = weekKey(d);
-  if (!db.weeks[k]) db.weeks[k] = { doc: '', tasks: [] };
+  if (!db.weeks[k]) db.weeks[k] = { doc: '', tasks: [], sessionNote: '' };
   return db.weeks[k];
 }
 function weekNumber(d) {
@@ -164,10 +165,10 @@ function md(src) {
    NAVEGAÇÃO
    =========================================================== */
 const TITLES = {
-  hoje:       ['Hoje', 'painel pessoal'],
-  trabalho:   ['Trabalho', 'diário de evolução técnica'],
-  financeiro: ['Financeiro', 'precisão de centavos'],
-  protocolos: ['Protocolos', 'rotinas inegociáveis'],
+  hoje:       ['Hoje', 'dia a dia'],
+  trabalho:   ['Trabalho', 'semana'],
+  financeiro: ['Financeiro', 'controle'],
+  protocolos: ['Protocolos', 'hábitos'],
 };
 
 document.querySelectorAll('.nav-item').forEach(btn => {
@@ -223,7 +224,7 @@ function renderHoje() {
   const recent = [...wk.tasks].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 5);
   document.getElementById('hojeSemana').innerHTML = recent.length ? recent.map(t =>
     `<li><span class="badge-type ${t.type}">${typeLabel(t.type)}</span><span style="flex:1">${esc(t.title)}</span>${t.review ? '<span class="badge-review">revisar</span>' : ''}</li>`
-  ).join('') : '<li class="empty">Semana ainda em branco — abra o diário e registre.</li>';
+  ).join('') : '<li class="empty">Semana em branco.</li>';
 }
 function kpi(cls, val, label) {
   return `<div class="kpi ${cls}"><div class="kpi-val">${val}</div><div class="kpi-label">${label}</div></div>`;
@@ -240,6 +241,12 @@ function renderWeek() {
     save();
     docEditor.hidden = true;
     docBody.hidden = false;
+  }
+  if (sessionEditor && !sessionEditor.hidden) {
+    getWeek(weekRef).sessionNote = sessionEditor.value;
+    save();
+    sessionEditor.hidden = true;
+    sessionBody.hidden = false;
   }
   const start = weekStart(weekRef);
   const end = new Date(start); end.setDate(start.getDate() + 6);
@@ -278,6 +285,7 @@ function renderWeek() {
   tbody.querySelectorAll('.t-edit').forEach(b => b.onclick = () => openTaskModal(b.closest('tr').dataset.id));
 
   renderSkillBars();
+  renderWeekSession();
 }
 function renderSkillBars() {
   const counts = {};
@@ -330,6 +338,44 @@ docEditor.addEventListener('blur', () => {
   renderWeekDoc();
 });
 
+/* ---- notas de sessão (integração brain) ---- */
+const sessionBody = document.getElementById('sessionBody');
+const sessionEditor = document.getElementById('sessionEditor');
+
+function renderWeekSession() {
+  const wk = getWeek(weekRef);
+  if (wk.sessionNote && wk.sessionNote.trim()) {
+    sessionBody.innerHTML = md(wk.sessionNote);
+    sessionBody.classList.remove('doc-empty');
+  } else {
+    sessionBody.innerHTML = `<p class="doc-placeholder">notas desta sessão para o brain&hellip;</p>`;
+    sessionBody.classList.add('doc-empty');
+  }
+}
+
+sessionBody.addEventListener('click', () => {
+  const wk = getWeek(weekRef);
+  sessionEditor.value = wk.sessionNote || '';
+  sessionBody.hidden = true;
+  sessionEditor.hidden = false;
+  sessionEditor.focus();
+});
+
+sessionEditor.addEventListener('blur', () => {
+  const wk = getWeek(weekRef);
+  wk.sessionNote = sessionEditor.value;
+  save();
+  sessionEditor.hidden = true;
+  sessionBody.hidden = false;
+  renderWeekSession();
+});
+
+document.getElementById('copySessionBtn').onclick = () => {
+  const wk = getWeek(weekRef);
+  if (!wk.sessionNote?.trim()) { toast('Nada para copiar'); return; }
+  navigator.clipboard.writeText(wk.sessionNote).then(() => toast('Notas copiadas'));
+};
+
 /* ---- tarefa da semana (estilo tabela de tracking) ---- */
 function openTaskModal(id) {
   const wk = getWeek(weekRef);
@@ -380,7 +426,7 @@ function renderBrain() {
   if (db.brain && db.brain.trim()) {
     brainBody.innerHTML = md(db.brain);
   } else {
-    brainBody.innerHTML = `<p class="doc-placeholder">O Cérebro é o seu documento-mestre: quem você é, metas, princípios, contexto dos projetos.<br/>Tudo que você (ou uma IA te ajudando) precisa saber antes de qualquer tarefa.<br/><br/>Clique em <strong>✎ Editar</strong> para começar.</p>`;
+    brainBody.innerHTML = `<p class="doc-placeholder">Clique em <strong>✎ Editar</strong> para começar.</p>`;
   }
 }
 function openBrain() {
