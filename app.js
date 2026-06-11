@@ -995,6 +995,122 @@ document.getElementById('brainSaveBtn').onclick = async () => {
   }
 };
 
+/* ===========================================================
+   SESSÕES — lista e visualização das sessões do brain repo
+   =========================================================== */
+
+/* --- abas do cérebro --- */
+document.querySelectorAll('.brain-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.brain-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    document.getElementById('brainTabCerebro').hidden = (tab !== 'cerebro');
+    document.getElementById('brainTabSessoes').hidden = (tab !== 'sessoes');
+    if (tab === 'sessoes') loadSessoes();
+  });
+});
+
+async function loadSessoes() {
+  const list = document.getElementById('sessoesList');
+  if (!ghToken()) {
+    list.innerHTML = `<p class="sessoes-empty">Ative o sync para visualizar as sessões do brain repo.</p>`;
+    return;
+  }
+  list.innerHTML = `<p class="sessoes-loading"><span>⟳</span> Carregando sessões…</p>`;
+  try {
+    const files = await ghGet('sessoes');
+    if (!files || !Array.isArray(files)) {
+      list.innerHTML = `<p class="sessoes-empty">Nenhuma sessão encontrada.</p>`;
+      return;
+    }
+    const sessions = files
+      .filter(f => f.name.endsWith('.md') && f.name !== 'TEMPLATE.md')
+      .sort((a, b) => b.name.localeCompare(a.name));
+    if (!sessions.length) {
+      list.innerHTML = `<p class="sessoes-empty">Nenhuma sessão registrada ainda.</p>`;
+      return;
+    }
+    list.innerHTML = sessions.map(f => {
+      const dateStr = f.name.replace('.md', '');
+      const label = formatSessionDate(dateStr);
+      return `<div class="sessao-item" data-file="${f.name}" data-date="${dateStr}" data-label="${label}">
+        <div class="sessao-item-info">
+          <span class="sessao-item-date">${label}</span>
+          <span class="sessao-item-meta">${dateStr}</span>
+        </div>
+        <span class="sessao-item-arrow">›</span>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('.sessao-item').forEach(el => {
+      el.addEventListener('click', () => openSessaoDetalhe(el.dataset.file, el.dataset.date, el.dataset.label));
+    });
+  } catch {
+    list.innerHTML = `<p class="sessoes-empty">Falha ao carregar sessões. Verifique o token.</p>`;
+  }
+}
+
+function formatSessionDate(str) {
+  const [y, m, d] = str.split('-');
+  if (!y || !m || !d) return str;
+  const months = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  return `${parseInt(d)} de ${months[parseInt(m) - 1]} de ${y}`;
+}
+
+async function openSessaoDetalhe(filename, dateStr, label) {
+  const overlay = document.getElementById('sessionDetailOverlay');
+  const body = document.getElementById('sessionDetailBody');
+  const titleEl = document.getElementById('sessionDetailTitle');
+  const dateEl = document.getElementById('sessionDetailDate');
+
+  dateEl.textContent = dateStr;
+  titleEl.textContent = label;
+  body.innerHTML = `<p class="sessoes-loading">⟳ Carregando…</p>`;
+  overlay.hidden = false;
+
+  try {
+    const f = await ghGet(`sessoes/${filename}`);
+    if (f) {
+      const content = b64decode(f.content);
+      body.innerHTML = md(content);
+      overlay.dataset.printContent = content;
+      overlay.dataset.printLabel = label;
+      overlay.dataset.printDate = dateStr;
+    } else {
+      body.innerHTML = `<p class="sessoes-empty">Arquivo não encontrado.</p>`;
+    }
+  } catch {
+    body.innerHTML = `<p class="sessoes-empty">Falha ao carregar sessão.</p>`;
+  }
+}
+
+document.getElementById('sessionDetailClose').onclick = () => {
+  document.getElementById('sessionDetailOverlay').hidden = true;
+};
+document.getElementById('sessionDetailOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('sessionDetailOverlay'))
+    document.getElementById('sessionDetailOverlay').hidden = true;
+});
+
+document.getElementById('sessionPrintBtn').onclick = () => {
+  const overlay = document.getElementById('sessionDetailOverlay');
+  const content = overlay.dataset.printContent || '';
+  const label = overlay.dataset.printLabel || 'Sessão';
+  const dateStr = overlay.dataset.printDate || '';
+
+  let root = document.getElementById('sessionPrintRoot');
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'sessionPrintRoot';
+    document.body.appendChild(root);
+  }
+  root.innerHTML = `
+    <div class="print-meta">Planner · Pedro Amaral &nbsp;|&nbsp; ${label} &nbsp;|&nbsp; ${dateStr}</div>
+    ${md(content)}
+  `;
+  window.print();
+};
+
 /* ---- modal de sync ---- */
 function openSyncModal() {
   modalTitle.textContent = 'Sync em nuvem';

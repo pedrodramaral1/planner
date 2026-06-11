@@ -228,13 +228,44 @@
           <button class="btn-icon" id="brainClose">✕</button>
         </div>
       </div>
-      <article class="doc-body" id="brainBody"></article>
-      <textarea id="brainEditor" class="brain-editor" hidden
-        placeholder="# Quem eu sou&#10;Objetivos, princípios, contexto dos projetos...&#10;&#10;## Metas 2026&#10;- ..."></textarea>
-      <div class="brain-foot" id="brainFoot" hidden>
-        <span class="muted">Markdown simples: # título, ## seção, - lista, **negrito**</span>
-        <button class="btn-primary" id="brainSaveBtn">Salvar cérebro</button>
+
+      <div class="brain-tabs">
+        <button class="brain-tab active" data-tab="cerebro">Cérebro</button>
+        <button class="brain-tab" data-tab="sessoes">Sessões</button>
       </div>
+
+      <!-- TAB: CÉREBRO -->
+      <div class="brain-tab-content" id="brainTabCerebro">
+        <article class="doc-body" id="brainBody"></article>
+        <textarea id="brainEditor" class="brain-editor" hidden
+          placeholder="# Quem eu sou&#10;Objetivos, princípios, contexto dos projetos...&#10;&#10;## Metas 2026&#10;- ..."></textarea>
+        <div class="brain-foot" id="brainFoot" hidden>
+          <span class="muted">Markdown simples: # título, ## seção, - lista, **negrito**</span>
+          <button class="btn-primary" id="brainSaveBtn">Salvar cérebro</button>
+        </div>
+      </div>
+
+      <!-- TAB: SESSÕES -->
+      <div class="brain-tab-content" id="brainTabSessoes" hidden>
+        <div id="sessoesList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SESSÃO (overlay de detalhe + impressão) ===== -->
+  <div class="session-detail-overlay" id="sessionDetailOverlay" hidden>
+    <div class="session-detail-panel">
+      <div class="session-detail-head">
+        <div>
+          <p class="eyebrow" id="sessionDetailDate"></p>
+          <h3 id="sessionDetailTitle">Sessão</h3>
+        </div>
+        <div class="brain-actions">
+          <button class="btn-soft" id="sessionPrintBtn">↓ PDF</button>
+          <button class="btn-icon" id="sessionDetailClose">✕</button>
+        </div>
+      </div>
+      <article class="doc-body session-detail-body" id="sessionDetailBody"></article>
     </div>
   </div>
 
