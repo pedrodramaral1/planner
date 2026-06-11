@@ -55,6 +55,12 @@ function parseCents(str) {
   return (neg ? -1 : 1) * Math.round(v * 100);
 }
 
+/* ---------- sync (declarado antes de save()) ---------- */
+let ghSha = null;
+let brainSha = null;
+let syncTimer = null;
+let pushing = false;
+
 /* ---------- estado ---------- */
 let db = load();
 let finDate = new Date();
@@ -125,10 +131,6 @@ function save() {
 const GH_OWNER = 'pedrodramaral1';
 const GH_REPO = 'brain';
 const GH_DATA_PATH = 'planner/data.json';
-let ghSha = null;       // sha atual do data.json remoto
-let brainSha = null;    // sha atual do cerebro.md remoto
-let syncTimer = null;
-let pushing = false;
 
 function ghToken() { return localStorage.getItem('planner_gh_token') || ''; }
 function ghHeaders() {
