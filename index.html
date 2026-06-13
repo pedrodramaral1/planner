@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=5" />
+  <link rel="stylesheet" href="styles.css?v=6" />
   <script src="https://accounts.google.com/gsi/client" async></script>
 </head>
 <body>
@@ -257,15 +257,19 @@
     <div class="session-detail-panel">
       <div class="session-detail-head">
         <div>
-          <p class="eyebrow" id="sessionDetailDate"></p>
+          <p class="session-detail-date" id="sessionDetailDate"></p>
           <h3 id="sessionDetailTitle">Sessão</h3>
         </div>
         <div class="brain-actions">
+          <button class="btn-soft" id="sessionEditBtn">✎ Editar</button>
+          <button class="btn-primary" id="sessionSaveBtn" hidden>Salvar</button>
           <button class="btn-soft" id="sessionPrintBtn">↓ PDF</button>
           <button class="btn-icon" id="sessionDetailClose">✕</button>
         </div>
       </div>
       <article class="doc-body session-detail-body" id="sessionDetailBody"></article>
+      <textarea id="sessionDetailEditor" class="brain-editor" hidden
+        placeholder="Conteúdo da sessão em Markdown..."></textarea>
     </div>
   </div>
 
@@ -282,6 +286,6 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

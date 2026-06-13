@@ -1027,7 +1027,7 @@ async function loadSessoes() {
       return;
     }
     const sessions = files
-      .filter(f => f.name.endsWith('.md') && f.name !== 'TEMPLATE.md')
+      .filter(f => f.name.endsWith('.md') && !f.name.startsWith('TEMPLATE'))
       .sort((a, b) => b.name.localeCompare(a.name));
     if (!sessions.length) {
       list.innerHTML = `<p class="sessoes-empty">Nenhuma sessão registrada ainda.</p>`;
@@ -1059,6 +1059,15 @@ function formatSessionDate(str) {
   return `${parseInt(d)} de ${months[parseInt(m) - 1]} de ${y}`;
 }
 
+function setSessaoEditMode(editing) {
+  const body = document.getElementById('sessionDetailBody');
+  const editor = document.getElementById('sessionDetailEditor');
+  document.getElementById('sessionEditBtn').hidden = editing;
+  document.getElementById('sessionSaveBtn').hidden = !editing;
+  body.hidden = editing;
+  editor.hidden = !editing;
+}
+
 async function openSessaoDetalhe(filename, dateStr, label) {
   const overlay = document.getElementById('sessionDetailOverlay');
   const body = document.getElementById('sessionDetailBody');
@@ -1068,7 +1077,11 @@ async function openSessaoDetalhe(filename, dateStr, label) {
   dateEl.textContent = dateStr;
   titleEl.textContent = label;
   body.innerHTML = `<p class="sessoes-loading">⟳ Carregando…</p>`;
+  setSessaoEditMode(false);
   overlay.hidden = false;
+  overlay.dataset.filename = filename;
+  overlay.dataset.printLabel = label;
+  overlay.dataset.printDate = dateStr;
 
   try {
     const f = await ghGet(`sessoes/${filename}`);
@@ -1076,8 +1089,7 @@ async function openSessaoDetalhe(filename, dateStr, label) {
       const content = b64decode(f.content);
       body.innerHTML = md(content);
       overlay.dataset.printContent = content;
-      overlay.dataset.printLabel = label;
-      overlay.dataset.printDate = dateStr;
+      overlay.dataset.sha = f.sha;
     } else {
       body.innerHTML = `<p class="sessoes-empty">Arquivo não encontrado.</p>`;
     }
@@ -1085,6 +1097,36 @@ async function openSessaoDetalhe(filename, dateStr, label) {
     body.innerHTML = `<p class="sessoes-empty">Falha ao carregar sessão.</p>`;
   }
 }
+
+document.getElementById('sessionEditBtn').onclick = () => {
+  const overlay = document.getElementById('sessionDetailOverlay');
+  if (!ghToken()) { toast('Ative o sync para editar'); return; }
+  document.getElementById('sessionDetailEditor').value = overlay.dataset.printContent || '';
+  setSessaoEditMode(true);
+  document.getElementById('sessionDetailEditor').focus();
+};
+
+document.getElementById('sessionSaveBtn').onclick = async () => {
+  const overlay = document.getElementById('sessionDetailOverlay');
+  const body = document.getElementById('sessionDetailBody');
+  const content = document.getElementById('sessionDetailEditor').value;
+  const filename = overlay.dataset.filename;
+  const btn = document.getElementById('sessionSaveBtn');
+  btn.disabled = true;
+  try {
+    const r = await ghPut(`sessoes/${filename}`, content, overlay.dataset.sha || null,
+      `Edita sessao ${overlay.dataset.printDate} via planner`);
+    overlay.dataset.sha = r.content.sha;
+    overlay.dataset.printContent = content;
+    body.innerHTML = md(content);
+    setSessaoEditMode(false);
+    toast('Sessão salva no brain repo');
+  } catch {
+    toast('Falha ao salvar no GitHub');
+  } finally {
+    btn.disabled = false;
+  }
+};
 
 document.getElementById('sessionDetailClose').onclick = () => {
   document.getElementById('sessionDetailOverlay').hidden = true;
