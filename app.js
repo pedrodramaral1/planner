@@ -9,9 +9,9 @@
 const STORE_KEY = 'planner_v2';
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const TASK_TYPES = [
-  { key: 'aprendi',   label: 'Aprendi' },
-  { key: 'aprimorei', label: 'Aprimorei' },
-  { key: 'criei',     label: 'Criei' },
+  { key: 'aprendi',   label: 'Aprendizado' },
+  { key: 'aprimorei', label: 'Aprimoramento' },
+  { key: 'criei',     label: 'Criação' },
 ];
 const BLOCK_TYPES = [
   { key: 'work',     label: 'Trabalho',  color: 'amber'  },
@@ -23,19 +23,19 @@ const BLOCK_TYPES = [
 const FIN_CATS = ['Salário', 'Extra', 'Moradia', 'Alimentação', 'Transporte', 'Saúde', 'Estudos', 'Lazer', 'Assinaturas', 'Outros'];
 const DEFAULT_PROTOCOLS = [
   { name: 'Protocolo 1 · Acordar às 06:00', desc: 'Todos os dias, sem exceção.', items: ['Acordei às 06:00'] },
-  { name: 'Protocolo 2 · Vitamina D', desc: 'Tomar vitamina D todos os dias.', items: ['Tomei a vitamina D'] },
+  { name: 'Protocolo 2 · Vitamina C', desc: 'Tomar vitamina C todos os dias.', items: ['Tomei a vitamina C'] },
   { name: 'Protocolo 3 · Hidratação', desc: 'Garrafa ou copo de água sempre por perto.', items: ['Água ao acordar', 'Água antes de dormir'] },
-  { name: 'Protocolo 4 · Disciplina', desc: 'Cumprir o primeiro protocolo.', items: ['Protocolo 1 cumprido'] },
+  { name: 'Protocolo 4 · Leitura', desc: 'Ler todos os dias.', items: ['Li no ônibus ou à noite'] },
 ];
 const DOC_TEMPLATE = `# Semana
 
-## Aprendi
+## Aprendizado
 -
 
-## Aprimorei
+## Aprimoramento
 -
 
-## Criei
+## Criação
 -
 
 ## Reflexão da semana
@@ -101,6 +101,22 @@ function migrate() {
   }
   if (!db.agenda) db.agenda = {};
   Object.values(db.weeks).forEach(w => { if (w.sessionNote === undefined) w.sessionNote = ''; });
+  // correcao unica: Vitamina D -> C e Protocolo 4 Disciplina -> Leitura
+  if (!db.protoFix2606) {
+    db.protocols.forEach(p => {
+      if (p.name === 'Protocolo 2 · Vitamina D') {
+        p.name = 'Protocolo 2 · Vitamina C';
+        p.desc = 'Tomar vitamina C todos os dias.';
+        (p.items || []).forEach(i => { if (i.text === 'Tomei a vitamina D') i.text = 'Tomei a vitamina C'; });
+      }
+      if (p.name === 'Protocolo 4 · Disciplina') {
+        p.name = 'Protocolo 4 · Leitura';
+        p.desc = 'Ler todos os dias.';
+        (p.items || []).forEach(i => { if (i.text === 'Protocolo 1 cumprido') i.text = 'Li no ônibus ou à noite'; });
+      }
+    });
+    db.protoFix2606 = true;
+  }
   DEFAULT_PROTOCOLS.forEach(dp => {
     if (!db.protocols.some(p => p.name === dp.name)) {
       db.protocols.push({
@@ -168,10 +184,10 @@ function setSync(state) {
   const hint = document.getElementById('syncHint');
   if (!btn) return;
   const map = {
-    off:  ['⇅ Ativar sync', 'Dados neste navegador.'],
-    busy: ['⟳ Sincronizando…', 'Enviando para o brain repo…'],
-    ok:   ['✓ Sincronizado', 'Em nuvem: brain repo (privado).'],
-    err:  ['⚠ Erro de sync', 'Falha ao falar com o GitHub. Confira o token.'],
+    off:  ['Ativar sync', 'Dados neste navegador.'],
+    busy: ['Sincronizando…', 'Enviando para o brain repo…'],
+    ok:   ['Sincronizado', 'Em nuvem: brain repo (privado).'],
+    err:  ['Erro de sync', 'Falha ao falar com o GitHub. Confira o token.'],
   };
   btn.textContent = map[state][0];
   hint.textContent = map[state][1];
@@ -399,7 +415,7 @@ function initGcalClient() {
 function setGcalStatus(state) {
   const btn = document.getElementById('gcalConnectBtn');
   if (!btn) return;
-  const map = { idle: '📅 Conectar GCal', ok: '✓ GCal conectado', err: '⚠ Reconectar GCal', busy: '⟳ …' };
+  const map = { idle: 'Conectar GCal', ok: 'GCal conectado', err: 'Reconectar GCal', busy: 'Conectando…' };
   btn.textContent = map[state] || map.idle;
   btn.dataset.state = state;
 }
@@ -766,10 +782,11 @@ function renderWeek() {
   });
   tbody.querySelectorAll('.t-edit').forEach(b => b.onclick = () => openTaskModal(b.closest('tr').dataset.id));
 
-  renderSkillBars();
   renderWeekSession();
 }
 function renderSkillBars() {
+  const el = document.getElementById('skillBars');
+  if (!el) return;
   const counts = {};
   Object.values(db.weeks).forEach(w => w.tasks.forEach(t => (t.tags || []).forEach(s => {
     const k = s.trim(); if (k) counts[k] = (counts[k] || 0) + 1;

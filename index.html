@@ -6,8 +6,8 @@
   <title>Planner · Pedro</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=6" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=7" />
   <script src="https://accounts.google.com/gsi/client" async></script>
 </head>
 <body>
@@ -21,22 +21,21 @@
     </div>
 
     <nav class="nav">
-      <button class="nav-item active" data-view="hoje"><span class="nv-ico">◈</span> Hoje</button>
-      <button class="nav-item" data-view="trabalho"><span class="nv-ico">▣</span> Trabalho</button>
-      <button class="nav-item" data-view="financeiro"><span class="nv-ico">$</span> Financeiro</button>
-      <button class="nav-item" data-view="protocolos"><span class="nv-ico">☰</span> Protocolos</button>
+      <button class="nav-item active" data-view="hoje">Hoje</button>
+      <button class="nav-item" data-view="trabalho">Trabalho</button>
+      <button class="nav-item" data-view="financeiro">Financeiro</button>
+      <button class="nav-item" data-view="protocolos">Protocolos</button>
     </nav>
 
     <button class="brain-btn" id="brainBtn">
-      <span class="brain-ico">🧠</span>
       <strong>Cérebro</strong>
     </button>
 
     <div class="sidebar-foot">
-      <button class="btn-ghost" id="syncBtn">⇅ Ativar sync</button>
-      <button class="btn-ghost" id="themeToggle">☀ Modo claro</button>
-      <button class="btn-ghost" id="exportBtn">⬇ Exportar dados</button>
-      <button class="btn-ghost" id="importBtn">⬆ Importar dados</button>
+      <button class="btn-ghost" id="syncBtn">Ativar sync</button>
+      <button class="btn-ghost" id="themeToggle">Modo claro</button>
+      <button class="btn-ghost" id="exportBtn">Exportar dados</button>
+      <button class="btn-ghost" id="importBtn">Importar dados</button>
       <input type="file" id="importFile" accept="application/json" hidden />
       <p class="hint" id="syncHint">Dados neste navegador.</p>
     </div>
@@ -80,7 +79,7 @@
           <button class="btn-icon" id="schedDayNext" title="Próximo dia">›</button>
           <button class="btn-soft sched-today-btn" id="schedDayToday">hoje</button>
           <div class="sched-nav-actions">
-            <button class="btn-soft" id="gcalConnectBtn">📅 Conectar GCal</button>
+            <button class="btn-soft" id="gcalConnectBtn">Conectar GCal</button>
             <button class="btn-primary sched-add-btn" id="addBlockBtn">+ Evento</button>
           </div>
         </div>
@@ -114,11 +113,11 @@
         </div>
         <div class="quick-add">
           <select id="qaType">
-            <option value="aprendi">Aprendi</option>
-            <option value="aprimorei">Aprimorei</option>
-            <option value="criei">Criei</option>
+            <option value="aprendi">Aprendizado</option>
+            <option value="aprimorei">Aprimoramento</option>
+            <option value="criei">Criação</option>
           </select>
-          <input type="text" id="qaTitle" placeholder="o que você fez? Enter salva" autocomplete="off" />
+          <input type="text" id="qaTitle" placeholder="Adicionar tarefa" autocomplete="off" />
         </div>
         <div class="wtable-wrap">
           <table class="wtable">
@@ -139,19 +138,12 @@
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-head">
-          <h2>Radar técnico</h2>
-        </div>
-        <div class="skill-bars" id="skillBars"></div>
-      </div>
-
       <div class="card session-card">
         <div class="card-head">
-          <h2>Sessão · brain</h2>
+          <h2>Sessão</h2>
           <div style="display:flex;gap:8px">
-            <button class="btn-soft" id="genNoteBtn">⟳ Gerar</button>
-            <button class="btn-soft" id="copySessionBtn">↗ Copiar</button>
+            <button class="btn-soft" id="genNoteBtn">Gerar</button>
+            <button class="btn-soft" id="copySessionBtn">Copiar</button>
           </div>
         </div>
         <article class="doc-body session-body" id="sessionBody" tabindex="0"></article>
@@ -166,8 +158,8 @@
         <h2 id="finMonthLabel"></h2>
         <button class="btn-icon" id="finNext">›</button>
         <div style="margin-left:auto;display:flex;gap:8px">
-          <button class="btn-soft" id="reserveBtn">⚙ Reserva</button>
-          <button class="btn-soft" id="bbImportBtn">⬆ BB</button>
+          <button class="btn-soft" id="reserveBtn">Reserva</button>
+          <button class="btn-soft" id="bbImportBtn">Importar BB</button>
           <input type="file" id="bbFile" accept=".ofx,.csv,.txt" hidden />
           <button class="btn-primary" id="addFinBtn">+ Lançamento</button>
         </div>
@@ -220,11 +212,10 @@
     <div class="brain-panel">
       <div class="brain-head">
         <div>
-          <p class="eyebrow">sempre presente</p>
-          <h3>🧠 Cérebro</h3>
+          <h3>Cérebro</h3>
         </div>
         <div class="brain-actions">
-          <button class="btn-soft" id="brainEditBtn">✎ Editar</button>
+          <button class="btn-soft" id="brainEditBtn">Editar</button>
           <button class="btn-icon" id="brainClose">✕</button>
         </div>
       </div>
@@ -261,9 +252,9 @@
           <h3 id="sessionDetailTitle">Sessão</h3>
         </div>
         <div class="brain-actions">
-          <button class="btn-soft" id="sessionEditBtn">✎ Editar</button>
+          <button class="btn-soft" id="sessionEditBtn">Editar</button>
           <button class="btn-primary" id="sessionSaveBtn" hidden>Salvar</button>
-          <button class="btn-soft" id="sessionPrintBtn">↓ PDF</button>
+          <button class="btn-soft" id="sessionPrintBtn">PDF</button>
           <button class="btn-icon" id="sessionDetailClose">✕</button>
         </div>
       </div>
@@ -286,6 +277,6 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

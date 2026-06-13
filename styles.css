@@ -27,7 +27,7 @@
   --radius: 16px;
   --font-ui: 'Inter', system-ui, sans-serif;
   --font-display: 'Space Grotesk', 'Inter', sans-serif;
-  --font-serif: 'Fraunces', Georgia, serif;
+  --font-serif: 'Inter', system-ui, sans-serif;
 }
 [data-theme="light"] {
   --bg: #eef0f4;
@@ -161,11 +161,13 @@ a { color: var(--accent-2); }
 .main { flex: 1; padding: 30px 36px 70px; max-width: 1240px; }
 .topbar { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 26px; }
 .eyebrow {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-size: 14px;
-  color: var(--amber);
-  margin-bottom: 1px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 3px;
 }
 .topbar h1 {
   font-family: var(--font-display);
@@ -344,12 +346,11 @@ a { color: var(--accent-2); }
 }
 .doc-inline-editor:focus { border-top-color: var(--accent); box-shadow: none; }
 .doc-body h2 {
-  font-family: var(--font-serif); font-style: italic;
-  font-size: 26px; font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: 700;
+  letter-spacing: -0.4px;
   margin: 4px 0 10px;
-  background: linear-gradient(110deg, var(--amber), var(--accent));
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--text);
 }
 .doc-body h3 {
   font-family: var(--font-display);
@@ -373,7 +374,7 @@ a { color: var(--accent-2); }
 }
 .doc-body hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 .doc-body strong { color: var(--text); }
-.doc-placeholder { color: var(--muted); font-style: italic; }
+.doc-placeholder { color: var(--muted); }
 .doc-editor { min-height: 340px; font-family: ui-monospace, monospace; font-size: 13px; line-height: 1.6; resize: vertical; }
 
 /* registro rápido (digita + Enter) */
